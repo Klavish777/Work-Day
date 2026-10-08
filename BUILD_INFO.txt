@@ -1,0 +1,3 @@
+Work-Day AI Trader - Android client (debug build)
+Commit: acc558a120d1a0ef84ccedb3723245b4735ffdd5
+Run: 37837453173
