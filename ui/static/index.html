@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<title>Work-Day AI Trader — AUD/CAD</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="/static/icons/icon-192.png" alt="" class="logo">
+    <div>
+      <h1 id="symbol">AUD/CAD</h1>
+      <div class="sub">Work-Day · LLM Multi-Agent Trading</div>
+    </div>
+  </div>
+  <div class="badges">
+    <span id="badge-mt5" class="badge gray">MT5: —</span>
+    <span id="badge-mode" class="badge gray">DEMO</span>
+    <span id="badge-engine" class="badge gray">STOPPED</span>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== DASHBOARD ===================== -->
+  <section id="tab-dashboard" class="tab active">
+    <div class="grid">
+      <div class="card price-card">
+        <div class="label">CURRENT PRICE</div>
+        <div class="big" id="price">—</div>
+        <div class="row-inline">
+          <span>BID <b id="bid">—</b></span>
+          <span>ASK <b id="ask">—</b></span>
+          <span>SPREAD <b id="spread">—</b></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">ACCOUNT <span id="account-type" class="tag"></span></div>
+        <div class="row-inline">
+          <span>BALANCE <b id="balance">—</b></span>
+          <span>EQUITY <b id="equity">—</b></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">OPEN POSITION</div>
+        <div class="big" id="position">NONE</div>
+        <div>CURRENT P/L: <b id="pl" class="pl-zero">$0.00</b></div>
+      </div>
+
+      <div class="card pipeline">
+        <div class="label">AI PIPELINE</div>
+        <div class="pipe-row"><span class="pipe-name">AI MARKET</span><span id="ai-market" class="pill gray">—</span></div>
+        <div class="pipe-row"><span class="pipe-name">STRATEGY</span><span id="ai-strategy" class="pill gray">—</span></div>
+        <div class="pipe-row"><span class="pipe-name">RISK</span><span id="ai-risk" class="pill gray">—</span></div>
+        <div class="pipe-row"><span class="pipe-name">LLM DECISION</span><span id="ai-llm" class="pill gray">—</span></div>
+        <div class="pipe-row"><span class="pipe-name">CONFIDENCE</span><span id="confidence" class="pill gray">—</span></div>
+      </div>
+
+      <div class="card wide">
+        <div class="label">LLM REASON</div>
+        <div id="reason" class="reason">Waiting for the first cycle…</div>
+        <div id="skip-note" class="skip-note"></div>
+      </div>
+
+      <div class="card wide controls">
+        <div class="label">CONTROL</div>
+        <div class="btn-grid">
+          <button id="btn-start" class="btn green">▶ START</button>
+          <button id="btn-pause" class="btn amber">⏸ PAUSE</button>
+          <button id="btn-stop" class="btn red">⏹ STOP</button>
+          <button id="btn-close-pos" class="btn blue">CLOSE POSITION</button>
+          <button id="btn-close-all" class="btn blue-dark">CLOSE ALL</button>
+          <button id="btn-mode" class="btn purple">DEMO ⇄ REAL</button>
+        </div>
+      </div>
+
+      <div class="card wide stats-card">
+        <div class="label">STATISTICS (TODAY / ALL)</div>
+        <div class="stats-grid" id="stats-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== JOURNAL ===================== -->
+  <section id="tab-journal" class="tab">
+    <div class="card wide">
+      <div class="label">TRADE JOURNAL</div>
+      <div class="table-wrap"><table id="trades-table">
+        <thead><tr><th>#</th><th>Side</th><th>Lot</th><th>Open</th><th>Close</th><th>P/L</th><th>Reason</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card wide">
+      <div class="label">AI DECISION LOG (LAST CYCLES)</div>
+      <div id="decisions" class="decisions"></div>
+    </div>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section id="tab-settings" class="tab">
+    <div class="card wide">
+      <div class="label">MT5 CONNECTION</div>
+      <div class="form-grid">
+        <label>Terminal path (optional)<input id="cfg-terminal" type="text" placeholder="C:\Program Files\MetaTrader 5\terminal64.exe"></label>
+        <label>Login<input id="cfg-login" type="text" inputmode="numeric"></label>
+        <label>Password<input id="cfg-password" type="password"></label>
+        <label>Server<input id="cfg-server" type="text" placeholder="Broker-Demo"></label>
+      </div>
+      <div class="btn-grid">
+        <button id="btn-mt5-connect" class="btn green">CONNECT MT5</button>
+        <button id="btn-mt5-disconnect" class="btn red">DISCONNECT</button>
+      </div>
+      <div id="mt5-detail" class="detail"></div>
+    </div>
+
+    <div class="card wide">
+      <div class="label">TRADING PARAMETERS (manual only — AI never changes these)</div>
+      <div class="form-grid">
+        <label>Lot size<input id="cfg-lot" type="number" step="0.01" min="0.01"></label>
+        <label>Max lot<input id="cfg-max-lot" type="number" step="0.01" min="0.01"></label>
+        <label>Profit target, $<input id="cfg-target" type="number" step="0.05" min="0.05"></label>
+        <label>Min profit bound, $<input id="cfg-min-profit" type="number" step="0.05" min="0.05"></label>
+        <label>Max profit bound, $<input id="cfg-max-profit" type="number" step="0.05" min="0.05"></label>
+        <label>Stop loss, $ (0 = off)<input id="cfg-sl-usd" type="number" step="0.05" min="0"></label>
+        <label>TP override, points (0 = auto)<input id="cfg-tp-points" type="number" step="1" min="0"></label>
+        <label>SL override, points (0 = auto)<input id="cfg-sl-points" type="number" step="1" min="0"></label>
+        <label>Max spread, points<input id="cfg-spread" type="number" step="1" min="1"></label>
+        <label>Min AI confidence<input id="cfg-conf" type="number" step="0.01" min="0" max="1"></label>
+        <label>Min risk/reward<input id="cfg-rr" type="number" step="0.1" min="0"></label>
+        <label>Cycle, sec<input id="cfg-cycle" type="number" step="1" min="2"></label>
+        <label>Max trades / day<input id="cfg-max-trades" type="number" step="1" min="1"></label>
+        <label>Max daily loss, $<input id="cfg-daily-loss" type="number" step="0.5" min="0"></label>
+        <label class="checkbox"><input id="cfg-auto" type="checkbox"> Auto-trading enabled</label>
+        <label class="checkbox"><input id="cfg-require-sl" type="checkbox"> Require stop-loss</label>
+      </div>
+      <div class="label" style="margin-top:12px">ALLOWED TIMEFRAMES</div>
+      <div id="tf-box" class="tf-box"></div>
+      <button id="btn-save-settings" class="btn green wide-btn">SAVE SETTINGS</button>
+      <div id="settings-msg" class="detail"></div>
+    </div>
+
+    <div class="card wide">
+      <div class="label">LLM PROVIDER (swappable — OpenAI / local / compatible)</div>
+      <div class="form-grid">
+        <label>Provider
+          <select id="cfg-llm-provider">
+            <option value="off">off — deterministic agents</option>
+            <option value="openai">openai</option>
+            <option value="openai_compatible">openai_compatible (Ollama / LM Studio / …)</option>
+          </select>
+        </label>
+        <label>Model<input id="cfg-llm-model" type="text"></label>
+        <label>Base URL<input id="cfg-llm-url" type="text" placeholder="http://127.0.0.1:11434/v1"></label>
+        <label>API key<input id="cfg-llm-key" type="password"></label>
+        <label>API key env var<input id="cfg-llm-env" type="text" placeholder="OPENAI_API_KEY"></label>
+      </div>
+      <div class="label" style="margin-top:12px">LLM PER AGENT</div>
+      <div class="tf-box" id="llm-agents-box"></div>
+      <button id="btn-save-llm" class="btn green wide-btn">SAVE LLM SETTINGS</button>
+    </div>
+
+    <div class="card wide danger">
+      <div class="label">MODE: DEMO / REAL</div>
+      <p>DEMO is the testing mode. Switching to REAL requires explicit confirmation.</p>
+      <div class="btn-grid">
+        <button id="btn-set-demo" class="btn blue">SET DEMO</button>
+        <button id="btn-set-real" class="btn red">SET REAL…</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- REAL-mode confirmation modal -->
+<div id="modal-real" class="modal hidden">
+  <div class="modal-box">
+    <h2>⚠️ REAL TRADING USES REAL MONEY.</h2>
+    <p>You are about to enable live trading on a real account. The system will
+       trade with actual funds. Type the confirmation phrase exactly:</p>
+    <p class="phrase">REAL TRADING USES REAL MONEY.</p>
+    <input id="real-confirm-input" type="text" autocomplete="off">
+    <div class="btn-grid">
+      <button id="btn-real-cancel" class="btn gray-btn">CANCEL</button>
+      <button id="btn-real-ok" class="btn red">ENABLE REAL TRADING</button>
+    </div>
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <button data-tab="dashboard" class="active">Dashboard</button>
+  <button data-tab="journal">Journal</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

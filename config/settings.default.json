@@ -1,0 +1,50 @@
+{
+  "symbol": "AUDCAD",
+  "mode": "DEMO",
+  "real_confirmed": false,
+  "auto_trading_enabled": true,
+  "engine_cycle_sec": 5,
+  "lot_size": 0.01,
+  "max_lot": 0.10,
+  "min_profit_usd": 0.30,
+  "max_profit_usd": 0.80,
+  "profit_target_usd": 0.50,
+  "stop_loss_usd": 1.00,
+  "take_profit_points": 0,
+  "stop_loss_points": 0,
+  "max_spread_points": 30,
+  "timeframes": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
+  "min_confidence": 0.65,
+  "min_risk_reward": 0.3,
+  "require_sl": true,
+  "max_trades_per_day": 10,
+  "max_daily_loss_usd": 5.0,
+  "deviation_points": 20,
+  "magic_number": 20261008,
+  "mt5": {
+    "terminal_path": "",
+    "login": "",
+    "password": "",
+    "server": ""
+  },
+  "llm": {
+    "provider": "off",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "api_key": "",
+    "api_key_env": "",
+    "model": "gpt-4o-mini",
+    "temperature": 0.1,
+    "max_tokens": 700,
+    "timeout_sec": 30,
+    "agents": {
+      "market_analyst": true,
+      "strategy_trader": true,
+      "risk_analyst": true,
+      "central": true
+    }
+  },
+  "ui": {
+    "host": "0.0.0.0",
+    "port": 8080
+  }
+}

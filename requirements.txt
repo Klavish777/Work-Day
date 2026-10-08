@@ -1,0 +1,15 @@
+# Work-Day AI Trader — core dependencies (any platform)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+requests>=2.31
+
+# MetaTrader5 official Python package is WINDOWS-ONLY (requires MT5 terminal installed).
+# On Windows install it with:
+#   pip install MetaTrader5
+# or use requirements-windows.txt
+
+# Development / tests
+pytest>=8.0
+
+# Icon generation utility (optional)
+pillow>=10.0

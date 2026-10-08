@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Runtime data (database, user settings with credentials, logs)
+data/
+logs/*.log
+config/settings.json
+
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
