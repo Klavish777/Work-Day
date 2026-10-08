@@ -38,6 +38,20 @@ jobs:
           name: workday-trader-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Push APK to artifacts branch (direct file delivery)
+        run: |
+          set -e
+          mkdir /tmp/apkbranch && cd /tmp/apkbranch
+          git init -q -b apk-artifacts
+          git config user.name "workday-ci"
+          git config user.email "workday-ci@users.noreply.github.com"
+          cp "$GITHUB_WORKSPACE/android/app/build/outputs/apk/debug/app-debug.apk" WorkDay-AI-Trader.apk
+          printf 'Work-Day AI Trader - Android client (debug build)\nCommit: %s\nRun: %s\n' "${{ github.sha }}" "${{ github.run_id }}" > BUILD_INFO.txt
+          git add .
+          git commit -q -m "APK build from run ${{ github.run_id }}"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push -q -f origin apk-artifacts
+
       - name: Publish APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
