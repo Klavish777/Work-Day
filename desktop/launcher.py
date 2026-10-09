@@ -146,8 +146,17 @@ def main() -> None:
             d = r.json()
             assert "engine_state" in d and "mt5" in d and "version" in d
             assert _rq.get(f"{url}/", timeout=10).status_code == 200
+            # on Windows the MT5 package MUST be bundled inside the exe;
+            # this turns the smoke test into a real packaging verification
+            import platform as _pl
+            if _pl.system() == "Windows":
+                assert d["mt5"]["available"] is True, (
+                    "MetaTrader5 package is NOT bundled/loaded in the exe: "
+                    + (d["mt5"]["detail"] or "no detail"))
             finish(True, f"dashboard 200, engine={d['engine_state']}, "
-                         f"mt5={d['mt5']['status']}, version={d['version']}, "
+                         f"mt5={d['mt5']['status']}, "
+                         f"mt5_available={d['mt5']['available']}, "
+                         f"version={d['version']}, "
                          f"update_checked={d['update']['checked']}")
         except Exception:  # noqa: BLE001
             finish(False, traceback.format_exc(limit=8))

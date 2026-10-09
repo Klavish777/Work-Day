@@ -55,7 +55,7 @@ jobs:
           --add-data "ui/static;ui/static"
           --collect-submodules uvicorn
           --collect-all webview
-          --hidden-import MetaTrader5
+          --collect-all MetaTrader5
           desktop/launcher.py
 
       - name: Smoke test (run the real EXE)

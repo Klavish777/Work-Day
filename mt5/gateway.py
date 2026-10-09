@@ -49,13 +49,12 @@ class MT5Gateway:
         try:
             import MetaTrader5 as _mt5  # noqa: PLC0415 — optional dependency
             self._mt5 = _mt5
-        except ImportError:
+        except ImportError as exc:
             self.status = "UNAVAILABLE"
-            self.detail = ("MetaTrader5 Python package is not installed on "
-                           f"this platform ({platform.system()}). The package "
-                           "requires Windows + an installed MT5 terminal. "
-                           "Run the server on the machine with MT5 and do: "
-                           "pip install MetaTrader5")
+            self.detail = (f"MetaTrader5 import failed: {exc}. "
+                           "Нужны Windows + установленный терминал MT5; если "
+                           "это Windows — установите VC++ Redistributable "
+                           "(2015-2022) и переустановите приложение.")
 
     # ------------------------------------------------------------------ #
     @property
