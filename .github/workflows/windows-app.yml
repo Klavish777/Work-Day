@@ -75,9 +75,17 @@ jobs:
             $ok = $false
           }
           if (Test-Path ".\dist\crash-report.txt") {
-            $crash = Get-Content ".\dist\crash-report.txt" -Raw
-            Write-Host "::error::crash report: $crash"
+            Write-Host "=== CRASH REPORT ==="
+            Get-Content ".\dist\crash-report.txt" | ForEach-Object {
+              Write-Host "CRASH: $_"
+              Write-Host "::error::CRASH: $_"
+            }
             $ok = $false
+          }
+          if (Test-Path ".\dist\selftest-result.txt") {
+            Get-Content ".\dist\selftest-result.txt" | ForEach-Object {
+              Write-Host "::error::SELFTEST: $_"
+            }
           }
           if (-not $ok) { throw "smoke test failed (exit=$($p2.ExitCode))" }
 

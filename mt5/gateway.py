@@ -49,7 +49,7 @@ class MT5Gateway:
         try:
             import MetaTrader5 as _mt5  # noqa: PLC0415 — optional dependency
             self._mt5 = _mt5
-        except ImportError as exc:
+        except Exception as exc:  # ImportError / DLL load / .pyd init errors
             self.status = "UNAVAILABLE"
             self.detail = (f"MetaTrader5 import failed: {exc}. "
                            "Нужны Windows + установленный терминал MT5; если "
