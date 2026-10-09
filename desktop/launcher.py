@@ -166,9 +166,18 @@ def main() -> None:
     if not args.no_window:
         try:
             import webview  # pywebview — native window (WebView2 on Windows)
-            webview.create_window(f"{APP_NAME} — prototip v{APP_VERSION}",
-                                  url, width=1240, height=860)
-            webview.start()   # blocks until the window is closed
+            win = webview.create_window(
+                f"{APP_NAME} — prototip v{APP_VERSION}", url,
+                width=1240, height=860)
+
+            def _on_started() -> None:
+                # open maximized (full screen)
+                try:
+                    win.maximize()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            webview.start(_on_started)  # blocks until the window is closed
             opened = True
         except Exception as exc:  # noqa: BLE001
             log.warning("Native window unavailable (%s) — opening browser", exc)
