@@ -411,6 +411,8 @@ function renderQuick(s) {
   const hasPos = !!(s.position && s.position.ticket);
   $("btn-buy").disabled = hasPos;
   $("btn-sell").disabled = hasPos;
+  $("btn-buy-chart").disabled = hasPos;
+  $("btn-sell-chart").disabled = hasPos;
 
   const mode = s.mode || "DEMO";
   const modeBadge = $("badge-mode");
@@ -852,6 +854,9 @@ function bindControls() {
   // MANUAL trading: BUY / SELL buttons of the trading bot
   $("btn-buy").onclick = () => manualTrade("BUY");
   $("btn-sell").onclick = () => manualTrade("SELL");
+  // same buttons overlaid on the chart (BUY right, SELL left)
+  $("btn-buy-chart").onclick = () => manualTrade("BUY");
+  $("btn-sell-chart").onclick = () => manualTrade("SELL");
 
   $("btn-mode").onclick = () => {
     const mode = (LAST_STATUS && LAST_STATUS.settings.mode) || "DEMO";

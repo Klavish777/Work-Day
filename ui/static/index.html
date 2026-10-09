@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0f17">
 <title>Work-Day AI Trader — AUD/CAD</title>
 <link rel="icon" href="/static/icons/icon-192.png">
-<link rel="stylesheet" href="/static/style.css?v=2.2">
+<link rel="stylesheet" href="/static/style.css?v=2.4">
 <script>
 /* v2.2: service-worker caching is permanently disabled — it served stale
    app.js/style.css and broke the UI controls after updates. */
@@ -92,7 +92,11 @@ if ("serviceWorker" in navigator) {
           <button data-tf="H1" title="Час">1ч</button>
           <button data-tf="H4" title="4 часа">4ч</button>
         </div>
-        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        <div class="chart-wrap">
+          <canvas id="chart"></canvas>
+          <button id="btn-sell-chart" class="chart-trade left">▼ SELL</button>
+          <button id="btn-buy-chart" class="chart-trade right">▲ BUY</button>
+        </div>
         <div class="chart-hint" id="chart-hint" data-i18n="chart_hint">Колесо — масштаб · перетаскивание — прокрутка · двойной клик — к эфиру</div>
       </div>
 
@@ -267,6 +271,6 @@ if ("serviceWorker" in navigator) {
   </div>
 </div>
 
-<script src="/static/app.js?v=2.2"></script>
+<script src="/static/app.js?v=2.4"></script>
 </body>
 </html>
