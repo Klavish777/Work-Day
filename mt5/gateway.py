@@ -65,30 +65,85 @@ class MT5Gateway:
     def constants(self) -> Dict[str, int]:
         return CONSTANTS
 
+    @staticmethod
+    def candidate_terminal_paths(cfg_path: str) -> List[str]:
+        """The user may paste a folder, or a full path; tolerate both and
+        common terminal executable names."""
+        import os
+        p = (cfg_path or "").strip()
+        out: List[str] = []
+        if not p:
+            return out
+        out.append(p)
+        if os.path.isdir(p):
+            for name in ("terminal64.exe", "terminal.exe", "terminal_x64.exe",
+                         "metatrader64.exe", "mt5terminal64.exe"):
+                out.append(os.path.join(p, name))
+        return out
+
     def connect(self, cfg: Dict[str, str]) -> Tuple[bool, str]:
         if not self.available:
             return False, self.detail
-        kwargs: Dict[str, Any] = {}
-        if cfg.get("terminal_path"):
-            kwargs["path"] = cfg["terminal_path"]
-        if cfg.get("login"):
-            try:
-                kwargs["login"] = int(cfg["login"])
-            except ValueError:
-                return False, "Login must be numeric."
-        if cfg.get("password"):
-            kwargs["password"] = cfg["password"]
-        if cfg.get("server"):
-            kwargs["server"] = cfg["server"]
 
-        if not self._mt5.initialize(**kwargs):
-            err = self._mt5.last_error()
+        login_raw = (cfg.get("login") or "").strip()
+        login = int(login_raw) if login_raw else None
+        password = cfg.get("password") or ""
+        server = (cfg.get("server") or "").strip()
+
+        attempts: List[str] = []
+
+        def try_init(**kw) -> bool:
+            try:
+                ok = self._mt5.initialize(**kw)
+            except Exception as exc:  # noqa: BLE001
+                attempts.append(f"initialize({list(kw)}): {exc}")
+                return False
+            if ok:
+                return True
+            attempts.append(f"initialize({list(kw)}): {self._mt5.last_error()}")
+            return False
+
+        connected = False
+        paths = self.candidate_terminal_paths(cfg.get("terminal_path", ""))
+        if login is not None:
+            for p in paths:
+                if try_init(path=p, login=login, password=password,
+                            server=server):
+                    connected = True
+                    break
+            if not connected:
+                connected = try_init(login=login, password=password,
+                                     server=server)
+        else:
+            for p in paths:
+                if try_init(path=p):
+                    connected = True
+                    break
+            if not connected:
+                connected = try_init()
+
+        if not connected:
             self.status = "ERROR"
-            self.detail = f"mt5.initialize failed: {err}"
+            self.detail = ("Не удалось запустить/подключить MT5. " +
+                           "; ".join(attempts[:3]) +
+                           " | Проверьте: терминал установлен; путь ведёт к "
+                           "terminal64.exe (или оставьте пустым); терминал не "
+                           "запущен параллельно.")
+            return False, self.detail
+
+        # A running terminal cannot be re-logged by the Python package: it
+        # attaches to the already-running instance. Detect and explain.
+        acc = self._mt5.account_info()
+        if login is not None and acc is not None and acc.login != login:
+            other = acc.login
+            self._mt5.shutdown()
+            self.status = "ERROR"
+            self.detail = (f"Терминал уже работает под счётом {other}, а нужен "
+                           f"{login}. Полностью ЗАКРОЙТЕ MetaTrader 5 "
+                           "(трей → выход) и нажмите CONNECT MT5 ещё раз.")
             return False, self.detail
 
         info = self._mt5.terminal_info()
-        acc = self._mt5.account_info()
         if info is None or acc is None:
             self._mt5.shutdown()
             self.status = "ERROR"

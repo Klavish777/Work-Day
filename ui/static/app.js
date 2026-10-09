@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 
 let LAST_STATUS = null;
 let pendingRealServer = null;
+let lastMt5DetailShown = null;
 const TF_LIST = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 const LLM_AGENTS = [["market_analyst", "Market Analyst"],
                     ["strategy_trader", "Strategy Trader"],
@@ -62,6 +63,14 @@ function renderUpdateBanner(s) {
 function renderStatus(s) {
   LAST_STATUS = s;
   renderUpdateBanner(s);
+
+  // live MT5 connection result on the settings card
+  const detLine = `MT5 ${s.mt5.status}${s.mt5.detail ? " — " + s.mt5.detail : ""}`;
+  if (detLine !== lastMt5DetailShown) {
+    lastMt5DetailShown = detLine;
+    const el = $("mt5-detail");
+    if (el) el.textContent = detLine;
+  }
   // badges
   const mt5 = s.mt5 || {};
   const mt5Badge = $("badge-mt5");
