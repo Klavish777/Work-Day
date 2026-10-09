@@ -1,0 +1,4 @@
+Work-Day AI Trader - Windows application (prototip)
+Version: 2.5
+Commit: 12c523cd6cf5de820a539533e74556da74793075
+Run: 37994285220
