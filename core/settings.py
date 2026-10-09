@@ -105,10 +105,12 @@ class SettingsManager:
                 try:
                     with open(self._path, "r", encoding="utf-8") as f:
                         data = json.load(f)
+                    legacy = "settings_schema" not in data
                     merged = copy.deepcopy(DEFAULT_SETTINGS)
                     self._deep_update(merged, data)
                     self._settings, _ = self._validate(merged)
-                    self._migrate()
+                    if legacy:
+                        self._migrate()
                 except (json.JSONDecodeError, OSError):
                     self._settings = copy.deepcopy(DEFAULT_SETTINGS)
             else:
@@ -125,18 +127,13 @@ class SettingsManager:
                 self.save()
 
     def _migrate(self) -> None:
-        """One-time upgrade of old user settings to the demo-friendly
-        permissions (schema v2): lower confidence bar, wider spread limit.
-        The user asked for full bot autonomy on demo accounts."""
-        try:
-            ver = int(self._settings.get("settings_schema", 1) or 1)
-        except (TypeError, ValueError):
-            ver = 1
-        if ver < SETTINGS_SCHEMA_VERSION:
-            self._settings["min_confidence"] = 0.35
-            self._settings["max_spread_points"] = 60.0
-            self._settings["settings_schema"] = SETTINGS_SCHEMA_VERSION
-            self.save()
+        """One-time upgrade of pre-v2 user settings to the demo-friendly
+        permissions: lower confidence bar, wider spread limit.
+        The user explicitly asked for full bot autonomy on demo accounts."""
+        self._settings["min_confidence"] = 0.35
+        self._settings["max_spread_points"] = 60.0
+        self._settings["settings_schema"] = SETTINGS_SCHEMA_VERSION
+        self.save()
 
     def save(self) -> None:
         ensure_dirs()
