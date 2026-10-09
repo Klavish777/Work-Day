@@ -62,7 +62,16 @@ jobs:
         run: |
           & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --version
           & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --selftest --port 8099
-          if ($LASTEXITCODE -ne 0) { throw "selftest failed" }
+          $code = $LASTEXITCODE
+          Start-Sleep -Seconds 2
+          if (Test-Path ".\dist\selftest-result.txt") {
+            $result = Get-Content ".\dist\selftest-result.txt" -Raw
+            Write-Host $result
+            if ($code -ne 0) { Write-Host "::error::selftest failed: $result" }
+          } else {
+            Write-Host "::error::selftest produced no result file (exit=$code)"
+          }
+          if ($code -ne 0) { throw "selftest failed with exit code $code" }
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4

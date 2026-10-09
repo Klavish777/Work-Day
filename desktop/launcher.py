@@ -42,6 +42,12 @@ def wait_for_port(host: str, port: int, timeout: float = 20.0) -> bool:
 
 
 def main() -> None:
+    # windowed (--noconsole) Windows builds have no stdout/stderr attached
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
     ap = argparse.ArgumentParser(description="Work-Day AI Trader (prototip)")
     ap.add_argument("--port", type=int, default=None)
     ap.add_argument("--host", default="127.0.0.1")
@@ -114,19 +120,34 @@ def main() -> None:
     # --- CI smoke test --------------------------------------------------- #
     if args.selftest:
         import requests as _rq
+        import traceback
+        result_file = os.path.join(os.path.dirname(os.path.abspath(sys.executable
+                                                    if getattr(sys, "frozen", False)
+                                                    else __file__)),
+                                   "selftest-result.txt")
+
+        def finish(ok: bool, text: str) -> None:
+            try:
+                with open(result_file, "w", encoding="utf-8") as f:
+                    f.write(("SELFTEST OK: " if ok else "SELFTEST FAILED: ")
+                            + text)
+            except OSError:
+                pass
+            print(("SELFTEST OK: " if ok else "SELFTEST FAILED: ") + text,
+                  flush=True)
+            os._exit(0 if ok else 1)
+
         try:
             r = _rq.get(f"{url}/api/status", timeout=10)
             assert r.status_code == 200, f"status {r.status_code}"
             d = r.json()
             assert "engine_state" in d and "mt5" in d and "version" in d
             assert _rq.get(f"{url}/", timeout=10).status_code == 200
-            print(f"SELFTEST OK: dashboard 200, engine={d['engine_state']}, "
-                  f"mt5={d['mt5']['status']}, version={d['version']}, "
-                  f"update_checked={d['update']['checked']}", flush=True)
-            os._exit(0)
-        except Exception as exc:  # noqa: BLE001
-            print(f"SELFTEST FAILED: {exc}", flush=True)
-            os._exit(1)
+            finish(True, f"dashboard 200, engine={d['engine_state']}, "
+                         f"mt5={d['mt5']['status']}, version={d['version']}, "
+                         f"update_checked={d['update']['checked']}")
+        except Exception:  # noqa: BLE001
+            finish(False, traceback.format_exc(limit=8))
 
     # --- GUI --------------------------------------------------------------- #
     opened = False

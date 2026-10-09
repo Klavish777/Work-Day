@@ -1,0 +1,1 @@
+SELFTEST OK: dashboard 200, engine=STOPPED, mt5=UNAVAILABLE, version=1.0, update_checked=True
