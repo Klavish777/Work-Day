@@ -14,6 +14,18 @@ def test_defaults_loaded(tmp_path):
     assert s["mode"] == "DEMO"
 
 
+def test_old_settings_migrated_to_demo_friendly_permissions(tmp_path):
+    import json
+    old = tmp_path / "settings.json"
+    old.write_text(json.dumps({"min_confidence": 0.65,
+                               "max_spread_points": 30}))
+    sm = SettingsManager(path=old, default_path=tmp_path / "d.json")
+    s = sm.get()
+    assert s["min_confidence"] == 0.35
+    assert s["max_spread_points"] == 60.0
+    assert s["settings_schema"] == 2
+
+
 def test_valid_update(tmp_path):
     sm = make_sm(tmp_path)
     ok, errors, s = sm.update({"lot_size": 0.05, "profit_target_usd": 0.8})

@@ -145,6 +145,20 @@ function renderStatus(s) {
   }
   $("skip-note").textContent = (s.skipped_reason && (!c || !c.market)) ? s.skipped_reason : "";
 
+  // why is the bot not trading right now?
+  let why = "";
+  if (c && !s.position) {
+    if (c.executed && c.executed.action === "BLOCKED_BY_RISK_MANAGER") {
+      why = "⛔ Риск-менеджер: " + (c.executed.reasons || []).join("; ");
+    } else if (c.gate && !c.gate.approved) {
+      why = "⛔ Гейт: " + (c.gate.reasons || []).join("; ");
+    } else if (c.llm_decision && c.llm_decision.action === "HOLD") {
+      why = "⏳ Ожидание сигнала: " +
+            ((c.llm_decision.reason || (c.consensus || {}).reason) || "");
+    }
+  }
+  $("why-not").textContent = why;
+
   renderStats(s.stats);
 }
 

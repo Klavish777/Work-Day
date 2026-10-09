@@ -95,6 +95,16 @@ def test_mt5_password_never_leaks(client):
     assert "secret" not in c.get("/api/status").text
 
 
+def test_demo_connect_auto_starts_engine(client):
+    c, engine = client
+    assert engine.engine_state == "STOPPED"
+    c.post("/api/mt5/connect", json={"login": "1", "password": "x",
+                                     "server": "MetaQuotes-Demo"})
+    engine._process_commands()
+    # demo + auto_trading_enabled => engine auto-runs after connect
+    assert engine.engine_state == "RUNNING"
+
+
 def test_connect_attempt_is_reported(client):
     c, engine = client
     r = c.post("/api/mt5/connect", json={"login": "1", "password": "x",

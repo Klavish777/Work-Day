@@ -5,16 +5,24 @@
   "auto_trading_enabled": true,
   "engine_cycle_sec": 5,
   "lot_size": 0.01,
-  "max_lot": 0.10,
-  "min_profit_usd": 0.30,
-  "max_profit_usd": 0.80,
-  "profit_target_usd": 0.50,
-  "stop_loss_usd": 1.00,
+  "max_lot": 0.1,
+  "min_profit_usd": 0.3,
+  "max_profit_usd": 0.8,
+  "profit_target_usd": 0.5,
+  "stop_loss_usd": 1.0,
   "take_profit_points": 0,
   "stop_loss_points": 0,
-  "max_spread_points": 30,
-  "timeframes": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
-  "min_confidence": 0.65,
+  "max_spread_points": 60,
+  "timeframes": [
+    "M1",
+    "M5",
+    "M15",
+    "M30",
+    "H1",
+    "H4",
+    "D1"
+  ],
+  "min_confidence": 0.35,
   "min_risk_reward": 0.3,
   "require_sl": true,
   "max_trades_per_day": 10,
@@ -46,5 +54,6 @@
   "ui": {
     "host": "0.0.0.0",
     "port": 8080
-  }
+  },
+  "settings_schema": 2
 }

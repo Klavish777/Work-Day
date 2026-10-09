@@ -162,11 +162,13 @@ class MarketAnalystAgent:
         buy_prob = flatness * 0.5 + (1.0 - flatness) * raw_p
         sell_prob = 1.0 - buy_prob
 
-        if avg_adx < 18:
+        # demo-friendly signal thresholds (v1.6): the bot must actually
+        # trade on demo while still ignoring pure noise
+        if avg_adx < 15:
             signal = "HOLD"
-        elif composite >= 0.25:
+        elif composite >= 0.20:
             signal = "BUY"
-        elif composite <= -0.25:
+        elif composite <= -0.20:
             signal = "SELL"
         else:
             signal = "HOLD"

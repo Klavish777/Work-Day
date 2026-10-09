@@ -127,6 +127,18 @@ class TradingEngine(threading.Thread):
                 self.last_connect = {"ts": time.time(), "ok": bool(ok),
                                      "detail": str(msg)}
                 self.journal.db.log_event("INFO" if ok else "ERROR", "mt5", msg)
+                # demo accounts: full autonomy — start trading right after
+                # a successful connection (REAL is NEVER auto-started)
+                if ok:
+                    st = self.settings_mgr.get()
+                    if (st.get("mode") == "DEMO"
+                            and st.get("auto_trading_enabled")
+                            and self.engine_state == EngineState.STOPPED.value):
+                        self.engine_state = EngineState.RUNNING.value
+                        self.state.update(engine_state=self.engine_state)
+                        self.journal.db.log_event(
+                            "INFO", "engine",
+                            "Auto-started after demo connection")
             elif t == "disconnect":
                 self.gw.disconnect()
                 self.journal.db.log_event("INFO", "mt5", "Disconnected")

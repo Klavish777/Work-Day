@@ -18,7 +18,12 @@ ALLOWED_TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
 
 REAL_CONFIRMATION_PHRASE = "REAL TRADING USES REAL MONEY."
 
+# v2: demo-friendly permissions (the user explicitly granted full
+# autonomy on demo accounts): lower AI confidence bar, wider spread limit.
+SETTINGS_SCHEMA_VERSION = 2
+
 DEFAULT_SETTINGS: Dict[str, Any] = {
+    "settings_schema": SETTINGS_SCHEMA_VERSION,
     # --- instrument ---
     "symbol": "AUDCAD",
     # --- account mode ---
@@ -39,9 +44,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "take_profit_points": 0,
     "stop_loss_points": 0,
     # --- market filters ---
-    "max_spread_points": 30,
+    "max_spread_points": 60,
     "timeframes": ["M1", "M5", "M15", "M30", "H1", "H4", "D1"],
-    "min_confidence": 0.65,            # required AI confidence level
+    "min_confidence": 0.35,            # required AI confidence level
     # NOTE: the core strategy is profit-target scalping ($0.30-$0.80 target,
     # ~$1 protective stop), so R:R is normally < 1. Set 1.0+ only if you
     # switch to classic trend entries with price-based TP/SL.
@@ -103,6 +108,7 @@ class SettingsManager:
                     merged = copy.deepcopy(DEFAULT_SETTINGS)
                     self._deep_update(merged, data)
                     self._settings, _ = self._validate(merged)
+                    self._migrate()
                 except (json.JSONDecodeError, OSError):
                     self._settings = copy.deepcopy(DEFAULT_SETTINGS)
             else:
@@ -117,6 +123,20 @@ class SettingsManager:
                     except (json.JSONDecodeError, OSError):
                         self._settings = copy.deepcopy(DEFAULT_SETTINGS)
                 self.save()
+
+    def _migrate(self) -> None:
+        """One-time upgrade of old user settings to the demo-friendly
+        permissions (schema v2): lower confidence bar, wider spread limit.
+        The user asked for full bot autonomy on demo accounts."""
+        try:
+            ver = int(self._settings.get("settings_schema", 1) or 1)
+        except (TypeError, ValueError):
+            ver = 1
+        if ver < SETTINGS_SCHEMA_VERSION:
+            self._settings["min_confidence"] = 0.35
+            self._settings["max_spread_points"] = 60.0
+            self._settings["settings_schema"] = SETTINGS_SCHEMA_VERSION
+            self.save()
 
     def save(self) -> None:
         ensure_dirs()
@@ -263,6 +283,12 @@ class SettingsManager:
                 "central": bool(agents.get("central", True)),
             },
         }
+
+        try:
+            s["settings_schema"] = int(s.get("settings_schema",
+                                             SETTINGS_SCHEMA_VERSION))
+        except (TypeError, ValueError):
+            s["settings_schema"] = SETTINGS_SCHEMA_VERSION
 
         ui = s.get("ui") or {}
         s["ui"] = {
