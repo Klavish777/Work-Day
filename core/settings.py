@@ -65,6 +65,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         "password": "",
         "server": "",
     },
+    # --- Kristina: the auto-trading avatar widget ---
+    "kristina": {
+        "background": "mountains",     # mountains | cave | snow
+        "tool": "pickaxe",             # pickaxe | shovel | drill
+    },
     # --- LLM configuration (swappable provider) ---
     "llm": {
         "provider": "off",             # off | openai | openai_compatible
@@ -251,6 +256,16 @@ class SettingsManager:
 
         s["auto_trading_enabled"] = bool(s.get("auto_trading_enabled", False))
         s["require_sl"] = bool(s.get("require_sl", True))
+
+        kr = s.get("kristina") or {}
+        s["kristina"] = {
+            "background": kr.get("background")
+            if kr.get("background") in ("mountains", "cave", "snow")
+            else "mountains",
+            "tool": kr.get("tool")
+            if kr.get("tool") in ("pickaxe", "shovel", "drill")
+            else "pickaxe",
+        }
 
         mt5cfg = s.get("mt5") or {}
         s["mt5"] = {

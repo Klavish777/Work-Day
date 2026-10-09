@@ -51,8 +51,19 @@ if ("serviceWorker" in navigator) {
   <!-- ===================== DASHBOARD (app-like, no page scroll) ========= -->
   <section id="tab-dashboard" class="tab active">
     <div class="dash-grid">
-      <!-- left column: price + account/position -->
+      <!-- left column: Kristina avatar + price + account/position -->
       <div class="col-left">
+        <div class="card kristina-card">
+          <button id="kristina-gear" class="kristina-gear" title="">⚙</button>
+          <div id="kristina-stage" class="kristina-stage">
+            <div id="kristina-bg" class="kristina-bg"></div>
+            <img id="kristina-girl" class="kristina-girl"
+                 src="/static/kristina/kristina_pickaxe.png" alt="Кристина">
+            <canvas id="kristina-fx" class="kristina-fx"></canvas>
+          </div>
+          <div class="kristina-caption"><b>Кристина</b> ·
+            <span id="kristina-state">отдыхает</span></div>
+        </div>
         <div class="card price-card">
           <div class="label" data-i18n="price_label">ТЕКУЩАЯ ЦЕНА</div>
           <div class="big" id="price">—</div>
@@ -256,6 +267,29 @@ if ("serviceWorker" in navigator) {
     </div>
   </section>
 </main>
+
+<!-- Kristina settings modal -->
+<div id="modal-kristina" class="modal hidden">
+  <div class="modal-box">
+    <h2 data-i18n="kristina_settings">⚙ Настройки Кристины (автоторговля)</h2>
+    <div class="label" style="margin-top:14px" data-i18n="kristina_bg_label">ФОН ПЕРСОНАЖА</div>
+    <div class="kristina-bgs" id="kristina-bgs">
+      <button data-bg="mountains"><img src="/static/kristina/bg_mountains.jpg" alt=""></button>
+      <button data-bg="cave"><img src="/static/kristina/bg_cave.jpg" alt=""></button>
+      <button data-bg="snow"><img src="/static/kristina/bg_snow.jpg" alt=""></button>
+    </div>
+    <div class="label" style="margin-top:14px" data-i18n="kristina_tool_label">РАБОЧИЙ ИНСТРУМЕНТ</div>
+    <div class="kristina-tools" id="kristina-tools">
+      <button data-tool="pickaxe"><img src="/static/kristina/kristina_pickaxe.png" alt=""><span data-i18n="tool_pickaxe">Кирка</span></button>
+      <button data-tool="shovel"><img src="/static/kristina/kristina_shovel.png" alt=""><span data-i18n="tool_shovel">Лопата</span></button>
+      <button data-tool="drill"><img src="/static/kristina/kristina_drill.png" alt=""><span data-i18n="tool_drill">Бур</span></button>
+    </div>
+    <div class="btn-grid" style="margin-top:16px">
+      <button id="btn-kristina-close" class="btn gray-btn" data-i18n="modal_cancel">ОТМЕНА</button>
+      <button id="btn-kristina-save" class="btn green" data-i18n="kristina_save">СОХРАНИТЬ</button>
+    </div>
+  </div>
+</div>
 
 <!-- REAL-mode confirmation modal -->
 <div id="modal-real" class="modal hidden">

@@ -461,6 +461,75 @@ body { padding-bottom: 24px; }
 
 /* manual trading: BUY / SELL */
 .controls .label { display: flex; align-items: baseline; gap: 8px; }
+
+/* ---------------- Kristina: auto-trading avatar widget ---------------- */
+.col-left { overflow-y: auto; scrollbar-width: thin; }
+.kristina-card { position: relative; padding: 10px; }
+.kristina-gear {
+  position: absolute; top: 14px; right: 14px; z-index: 4;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--stroke); cursor: pointer;
+  background: rgba(0, 0, 0, 0.45); color: #fff; font-size: 17px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: transform .3s ease, background .2s;
+}
+.kristina-gear:hover { transform: rotate(60deg); background: rgba(0,0,0,0.65); }
+.kristina-stage {
+  position: relative; width: 100%; aspect-ratio: 1 / 1;
+  border-radius: 16px; overflow: hidden; cursor: pointer;
+  border: 1px solid var(--stroke);
+  background: #000;
+}
+.kristina-bg {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center;
+}
+.kristina-girl {
+  position: absolute; bottom: 3%; left: 50%; height: 80%;
+  transform: translateX(-50%); transform-origin: 50% 80%;
+  image-rendering: auto; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.45));
+}
+.kristina-fx { position: absolute; inset: 0; pointer-events: none; }
+.kristina-caption {
+  margin-top: 8px; text-align: center; font-size: 12.5px; color: var(--muted);
+}
+.kristina-caption b { color: var(--text); }
+/* working state: looped swing + walking parallax + gold sparks (JS) */
+.kristina-stage.working .kristina-girl {
+  animation: kristina-swing 0.9s ease-in-out infinite;
+}
+.kristina-stage.working .kristina-bg {
+  animation: kristina-walk 16s ease-in-out infinite;
+}
+.kristina-stage.working { box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.55),
+  0 0 26px rgba(48, 209, 88, 0.25); }
+@keyframes kristina-swing {
+  0%, 100% { transform: translateX(-50%) rotate(-7deg) translateY(0); }
+  50% { transform: translateX(-50%) rotate(9deg) translateY(3px); }
+}
+@keyframes kristina-walk {
+  0%, 100% { background-position: 30% 50%; }
+  50% { background-position: 70% 50%; }
+}
+
+/* Kristina settings modal */
+.kristina-bgs { display: flex; gap: 10px; }
+.kristina-bgs button {
+  flex: 1; padding: 0; border-radius: 14px; overflow: hidden; cursor: pointer;
+  border: 2px solid transparent; background: none; transition: border-color .15s;
+}
+.kristina-bgs button img { display: block; width: 100%; aspect-ratio: 1/1; object-fit: cover; }
+.kristina-bgs button.sel, .kristina-tools button.sel {
+  border-color: var(--blue); box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+}
+.kristina-tools { display: flex; gap: 10px; }
+.kristina-tools button {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 8px; border-radius: 14px; cursor: pointer;
+  border: 2px solid transparent; background: rgba(255, 255, 255, 0.06);
+  color: var(--text); font-size: 12.5px; font-weight: 600; font-family: inherit;
+}
+.kristina-tools button img { height: 64px; object-fit: contain; }
 .trade-row { margin-bottom: 10px; }
 .trade-buy, .trade-sell {
   font-size: 17px; font-weight: 750; letter-spacing: 0.02em;

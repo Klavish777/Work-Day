@@ -72,6 +72,15 @@ const I18N = {
     manual_hint: "· ручная торговля: BUY/SELL",
     cmd_sent: "Команда отправлена",
     cmd_err: "Ошибка",
+    kristina_idle: "отдыхает",
+    kristina_working: "добывает золото ⛏",
+    kristina_settings: "⚙ Настройки Кристины (автоторговля)",
+    kristina_bg_label: "ФОН ПЕРСОНАЖА",
+    kristina_tool_label: "РАБОЧИЙ ИНСТРУМЕНТ",
+    tool_pickaxe: "Кирка", tool_shovel: "Лопата", tool_drill: "Бур",
+    kristina_save: "СОХРАНИТЬ",
+    kristina_started: "Кристина начала автоторговлю",
+    kristina_stopped: "Автоторговля остановлена",
     mem_note: "Память агентов: ", mem_closed: "закрытых сделок из истории",
     mem_wins: "прибыльных", mem_losses: "убыточных",
     mem_learn: "Агенты запоминают каждую сделку и автоматически пересчитывают веса стратегий.",
@@ -144,6 +153,15 @@ const I18N = {
     manual_hint: "· manual trading: BUY/SELL",
     cmd_sent: "Command sent",
     cmd_err: "Error",
+    kristina_idle: "resting",
+    kristina_working: "mining gold ⛏",
+    kristina_settings: "⚙ Kristina settings (auto-trading)",
+    kristina_bg_label: "CHARACTER BACKGROUND",
+    kristina_tool_label: "WORKING TOOL",
+    tool_pickaxe: "Pickaxe", tool_shovel: "Shovel", tool_drill: "Drill",
+    kristina_save: "SAVE",
+    kristina_started: "Kristina started auto-trading",
+    kristina_stopped: "Auto-trading stopped",
     mem_note: "Agent memory: ", mem_closed: "closed trades from history",
     mem_wins: "winners", mem_losses: "losers",
     mem_learn: "Agents remember every trade and re-weight the strategies automatically.",
@@ -168,6 +186,9 @@ function applyLang() {
   $("howto-box").innerHTML = t("howto");
   $("lang-btn").textContent = LANG.toUpperCase();
   if ($("reason").dataset.default === "1") $("reason").textContent = t("waiting");
+  const ks = $("kristina-state");
+  if (ks) ks.textContent = KRISTINA.working ? t("kristina_working")
+                                            : t("kristina_idle");
   if (LAST_STATUS) { renderStats(LAST_STATUS.stats); }
 }
 
@@ -222,6 +243,15 @@ function renderUpdateBanner(s) {
 function renderStatus(s) {
   LAST_STATUS = s;
   renderUpdateBanner(s);
+
+  // Kristina settings (background / tool)
+  const kr = (s.settings && s.settings.kristina) || {};
+  if (kr.background && (kr.background !== KRISTINA.bg ||
+                        kr.tool !== KRISTINA.tool)) {
+    KRISTINA.bg = kr.background;
+    KRISTINA.tool = kr.tool || "pickaxe";
+    applyKristina();
+  }
 
   // live MT5 connection result on the settings card
   let detLine = `MT5 ${s.mt5.status}${s.mt5.detail ? " — " + s.mt5.detail : ""}`;
@@ -406,6 +436,9 @@ function renderQuick(s) {
   $("btn-start").disabled = (st === "RUNNING");
   $("btn-pause").disabled = (st !== "RUNNING");
   $("btn-stop").disabled = (st === "STOPPED");
+
+  // Kristina works exactly while the engine is RUNNING
+  setKristinaWorking(st === "RUNNING");
 
   // manual BUY/SELL available only when no position is open
   const hasPos = !!(s.position && s.position.ticket);
@@ -690,6 +723,127 @@ async function cmd(path, label) {
   return r;
 }
 
+// --------------------------------------------------------------------- //
+// KRISTINA — the auto-trading avatar (looped animation + settings)
+// --------------------------------------------------------------------- //
+const KRISTINA = { bg: "mountains", tool: "pickaxe", working: false,
+                   pending: null };
+let KR_FX = [];      // gold spark particles
+let KR_RAF = null;
+
+function applyKristina() {
+  const stage = $("kristina-stage");
+  if (!stage) return;
+  $("kristina-bg").style.backgroundImage =
+    `url("/static/kristina/bg_${KRISTINA.bg}.jpg")`;
+  $("kristina-girl").src = `/static/kristina/kristina_${KRISTINA.tool}.png`;
+  // modal selection marks
+  document.querySelectorAll("#kristina-bgs button").forEach(b =>
+    b.classList.toggle("sel", b.dataset.bg === KRISTINA.bg));
+  document.querySelectorAll("#kristina-tools button").forEach(b =>
+    b.classList.toggle("sel", b.dataset.tool === KRISTINA.tool));
+}
+
+function setKristinaWorking(on) {
+  if (KRISTINA.working === on) return;
+  KRISTINA.working = on;
+  const stage = $("kristina-stage");
+  if (stage) stage.classList.toggle("working", on);
+  const st = $("kristina-state");
+  if (st) st.textContent = on ? t("kristina_working") : t("kristina_idle");
+  if (on) startKristinaFx(); else stopKristinaFx();
+}
+
+function startKristinaFx() {
+  const canvas = $("kristina-fx");
+  if (!canvas || KR_RAF) return;
+  let last = 0;
+  const loop = (ts) => {
+    KR_RAF = requestAnimationFrame(loop);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w < 5) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (ts - last > 110) {
+      last = ts;
+      KR_FX.push({ x: w * (0.62 + Math.random() * 0.2),
+                   y: h * (0.18 + Math.random() * 0.2),
+                   vx: (Math.random() - 0.5) * 1.4,
+                   vy: 1 + Math.random() * 1.6,
+                   r: 1.5 + Math.random() * 2.2, life: 1 });
+    }
+    KR_FX = KR_FX.filter(p => p.life > 0);
+    for (const p of KR_FX) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.08; p.life -= 0.02;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = "#ffd60a";
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  };
+  KR_RAF = requestAnimationFrame(loop);
+}
+
+function stopKristinaFx() {
+  if (KR_RAF) cancelAnimationFrame(KR_RAF);
+  KR_RAF = null;
+  KR_FX = [];
+  const canvas = $("kristina-fx");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+function bindKristina() {
+  const stage = $("kristina-stage");
+  if (!stage) return;
+  // click on the girl/scene: start / stop auto-trading
+  stage.onclick = async () => {
+    const on = !(LAST_QUICK && LAST_QUICK.engine_state === "RUNNING");
+    const r = await api(on ? "/api/engine/start" : "/api/engine/stop", "POST");
+    if (r.ok) showToast(on ? "⛏ " + t("kristina_started")
+                           : "⏹ " + t("kristina_stopped"));
+  };
+
+  // gear -> settings modal
+  $("kristina-gear").onclick = () => {
+    KRISTINA.pending = { bg: KRISTINA.bg, tool: KRISTINA.tool };
+    markPending();
+    $("modal-kristina").classList.remove("hidden");
+  };
+  function markPending() {
+    document.querySelectorAll("#kristina-bgs button").forEach(b =>
+      b.classList.toggle("sel", b.dataset.bg === KRISTINA.pending.bg));
+    document.querySelectorAll("#kristina-tools button").forEach(b =>
+      b.classList.toggle("sel", b.dataset.tool === KRISTINA.pending.tool));
+  }
+  document.querySelectorAll("#kristina-bgs button").forEach(b =>
+    b.onclick = () => { KRISTINA.pending.bg = b.dataset.bg; markPending(); });
+  document.querySelectorAll("#kristina-tools button").forEach(b =>
+    b.onclick = () => { KRISTINA.pending.tool = b.dataset.tool; markPending(); });
+  $("btn-kristina-close").onclick = () =>
+    $("modal-kristina").classList.add("hidden");
+  $("btn-kristina-save").onclick = async () => {
+    const r = await api("/api/settings", "POST", { settings: {
+      kristina: KRISTINA.pending } });
+    if (r.ok) {
+      KRISTINA.bg = KRISTINA.pending.bg;
+      KRISTINA.tool = KRISTINA.pending.tool;
+      applyKristina();
+      showToast("✓ " + t("kristina_save"));
+    } else {
+      showToast("✗ " + JSON.stringify(r.data || ""), true);
+    }
+    $("modal-kristina").classList.add("hidden");
+  };
+
+  applyKristina();
+}
+
 async function manualTrade(side) {
   const r = await api("/api/trade/manual", "POST", { side });
   const d = r.data || {};
@@ -946,6 +1100,7 @@ async function confirmReal() {
 // --------------------------------------------------------------------- //
 async function init() {
   bindControls();
+  bindKristina();
   applyLang();
   const r = await api("/api/status");
   if (r.ok && r.data) { renderStatus(r.data); fillSettings(r.data.settings); }

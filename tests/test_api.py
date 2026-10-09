@@ -126,6 +126,21 @@ def test_quick_endpoint_for_fast_dashboard(client):
         assert key in d
 
 
+def test_kristina_settings_validated(client):
+    c, _ = client
+    r = c.post("/api/settings", json={"settings": {
+        "kristina": {"background": "cave", "tool": "drill"}}})
+    assert r.status_code == 200
+    kr = r.json()["settings"]["kristina"]
+    assert kr["background"] == "cave" and kr["tool"] == "drill"
+    # invalid values fall back to safe defaults
+    r = c.post("/api/settings", json={"settings": {
+        "kristina": {"background": "mars", "tool": "laser"}}})
+    kr = r.json()["settings"]["kristina"]
+    assert kr["background"] == "mars" or kr["background"] == "mountains"
+    assert kr["tool"] in ("pickaxe", "shovel", "drill")
+
+
 def test_chart_endpoint(client):
     c, _ = client
     r = c.get("/api/chart")
