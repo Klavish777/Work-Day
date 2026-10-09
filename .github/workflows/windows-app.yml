@@ -56,6 +56,7 @@ jobs:
           --collect-submodules uvicorn
           --collect-all webview
           --collect-all MetaTrader5
+          --collect-all numpy
           desktop/launcher.py
 
       - name: Smoke test (run the real EXE)
