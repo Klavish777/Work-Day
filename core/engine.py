@@ -23,6 +23,7 @@ from agents import strategy_library as slib
 from core.appstate import AppState
 from core.decision_engine import CentralDecisionEngine
 from core.memory import AgentMemory
+from core.volodya import VolodyaCore
 from core.models import CycleReport, EngineState, PositionView
 from core import consensus as consensus_mod
 from execution.engine import ExecutionEngine
@@ -65,6 +66,8 @@ class TradingEngine(threading.Thread):
             self.memory.backfill_from_journal(self.journal.recent_trades(1000))
         except Exception as exc:  # noqa: BLE001
             self.log.warning("Memory backfill skipped: %s", exc)
+        # "Володя" — the built-in trading brain (works without any LLM)
+        self.volodya = VolodyaCore(self.memory)
 
     # ------------------------------------------------------------------ #
     # Control API (called from the UI thread; commands run in the loop)
@@ -111,7 +114,7 @@ class TradingEngine(threading.Thread):
                         self._cycle()
             except Exception:  # noqa: BLE001 — engine must never die
                 self.log.exception("Engine cycle error")
-            time.sleep(0.5)
+            time.sleep(0.2)   # fast loop: fresh tick/balance every ~200 ms
         self.log.info("Trading engine thread stopped")
 
     # ------------------------------------------------------------------ #
@@ -291,9 +294,17 @@ class TradingEngine(threading.Thread):
             recent_trades, tick, sym)
         report.consensus = consensus_mod.evaluate(report.market,
                                                   report.strategy, report.risk)
-        report.llm_decision = self.central.decide(
-            report.market, report.strategy, report.risk, report.consensus,
-            settings, account, position, tick, recent_trades)
+        if getattr(self.provider, "name", "off") == "off":
+            # no external LLM -> the built-in brain "Володя" decides,
+            # using the weighted votes of the strategy library + memory
+            report.llm_decision = self.volodya.decide(
+                votes, report.market, report.strategy, report.risk,
+                report.consensus, settings, account, position, tick,
+                recent_trades)
+        else:
+            report.llm_decision = self.central.decide(
+                report.market, report.strategy, report.risk, report.consensus,
+                settings, account, position, tick, recent_trades)
 
         decision = report.llm_decision
         self.log.info("Cycle %s: market=%s strategy=%s risk=%s llm=%s",

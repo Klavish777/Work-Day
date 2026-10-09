@@ -107,6 +107,20 @@ def create_app(engine, settings_mgr, journal, gateway,
         engine.cmd_close_all()
         return {"ok": True}
 
+    @app.get("/api/quick")
+    def quick():
+        """Ultra-light snapshot for the 100 ms dashboard refresh loop:
+        live tick, balance/equity and the open position — no heavy work."""
+        snap = engine.state.snapshot()
+        return {
+            "engine_state": snap.get("engine_state"),
+            "mt5_status": snap.get("mt5_status"),
+            "tick": snap.get("tick"),
+            "account": snap.get("account"),
+            "position": snap.get("position"),
+            "mode": (settings_mgr.get().get("mode") or "DEMO"),
+        }
+
     # ------------------------------------------------------------------ #
     @app.post("/api/mt5/connect")
     def mt5_connect(body: MT5ConnectBody):

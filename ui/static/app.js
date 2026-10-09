@@ -17,8 +17,8 @@ const I18N = {
     account_label: "СЧЁТ", balance: "БАЛАНС", equity: "ЭКВИТИ",
     open_position: "ОТКРЫТАЯ ПОЗИЦИЯ", current_pl: "ТЕКУЩИЙ P/L",
     ai_pipeline: "AI КОНВЕЙЕР", ai_market: "РЫНОК (AI)", strategy: "СТРАТЕГИЯ",
-    risk: "РИСК", llm_decision: "РЕШЕНИЕ LLM", confidence: "УВЕРЕННОСТЬ",
-    llm_reason: "ПРИЧИНА РЕШЕНИЯ LLM",
+    risk: "РИСК", llm_decision: "РЕШЕНИЕ · ВОЛОДЯ", confidence: "УВЕРЕННОСТЬ",
+    llm_reason: "ПРИЧИНА РЕШЕНИЯ",
     waiting: "Ожидание первого цикла…",
     control: "УПРАВЛЕНИЕ",
     btn_start: "СТАРТ", btn_pause: "ПАУЗА", btn_stop: "СТОП",
@@ -83,8 +83,8 @@ const I18N = {
     account_label: "ACCOUNT", balance: "BALANCE", equity: "EQUITY",
     open_position: "OPEN POSITION", current_pl: "CURRENT P/L",
     ai_pipeline: "AI PIPELINE", ai_market: "AI MARKET", strategy: "STRATEGY",
-    risk: "RISK", llm_decision: "LLM DECISION", confidence: "CONFIDENCE",
-    llm_reason: "LLM REASON",
+    risk: "RISK", llm_decision: "DECISION · VOLODYA", confidence: "CONFIDENCE",
+    llm_reason: "DECISION REASON",
     waiting: "Waiting for the first cycle…",
     control: "CONTROL",
     btn_start: "START", btn_pause: "PAUSE", btn_stop: "STOP",
@@ -366,6 +366,62 @@ function renderStats(stats) {
 }
 
 // --------------------------------------------------------------------- //
+// Fast path: price / balance / position updated every 100 ms
+// --------------------------------------------------------------------- //
+async function pollQuick() {
+  try {
+    const r = await api("/api/quick");
+    if (r.ok && r.data) renderQuick(r.data);
+  } catch (e) { /* server restarting */ }
+}
+
+function renderQuick(s) {
+  const mt5Badge = $("badge-mt5");
+  const mstat = s.mt5_status || "—";
+  mt5Badge.textContent = "MT5: " + mstat;
+  mt5Badge.className = "badge " + (mstat === "CONNECTED" ? "green" :
+                        mstat === "UNAVAILABLE" ? "amber" :
+                        mstat === "ERROR" ? "red" : "gray");
+
+  const st = s.engine_state || "STOPPED";
+  const stBadge = $("badge-engine");
+  stBadge.textContent = st;
+  stBadge.className = "badge " + (st === "RUNNING" ? "green" :
+                        st === "PAUSED" ? "amber" : "gray");
+
+  const mode = s.mode || "DEMO";
+  const modeBadge = $("badge-mode");
+  modeBadge.textContent = mode + (mode === "REAL" ? " ⚠" : "");
+  modeBadge.className = "badge " + (mode === "REAL" ? "red" : "green");
+
+  const t5 = s.tick;
+  if (t5) {
+    const digits = 5;
+    $("price").textContent = ((t5.bid + t5.ask) / 2).toFixed(digits);
+    $("bid").textContent = t5.bid.toFixed(digits);
+    $("ask").textContent = t5.ask.toFixed(digits);
+    $("spread").textContent = Number(t5.spread_points).toFixed(1) + " pts";
+  }
+
+  const a = s.account;
+  if (a) {
+    $("balance").textContent = `${Number(a.balance).toFixed(2)} ${a.currency}`;
+    $("equity").textContent = `${Number(a.equity).toFixed(2)} ${a.currency}`;
+  }
+
+  const p = s.position;
+  if (p) {
+    $("position").textContent = `${p.side} ${p.lot} @ ${p.open_price}`;
+    const pl = $("pl");
+    pl.textContent = fmtMoney(p.profit);
+    pl.className = plClass(p.profit);
+  } else if (LAST_STATUS && !LAST_STATUS.position) {
+    $("position").textContent = LANG === "ru" ? "НЕТ" : "NONE";
+    const pl = $("pl"); pl.textContent = "$0.00"; pl.className = "pl-zero";
+  }
+}
+
+// --------------------------------------------------------------------- //
 async function pollStatus() {
   try {
     const r = await api("/api/status");
@@ -608,6 +664,8 @@ async function init() {
   if (r.ok && r.data) { renderStatus(r.data); fillSettings(r.data.settings); }
   pollStatus();
   setInterval(pollStatus, 2000);
+  pollQuick();
+  setInterval(pollQuick, 100);   // fastest practical UI refresh
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }

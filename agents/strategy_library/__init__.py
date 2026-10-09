@@ -20,6 +20,9 @@ Sources (public books / methods):
  10. ADX + DI direction   — W. Wilder, ADX trend filter
  11. Momentum threshold   — G. Antonacci / momentum literature
  12. Engulfing price action — A. Brooks, "Trading Price Action"
+ 13. Volodya meta (proprietary) — original system built from the same
+     candle data: rolling z-score, EMA slope, RSI position and the weighted
+     agreement of strategies 1-12 (the meta-vote). Developed in-house.
 """
 from __future__ import annotations
 
@@ -42,6 +45,7 @@ CATALOG: Dict[str, tuple] = {
     "adx_di": ("ADX + направление DI", "У. Уайлдер — индекс тренда"),
     "momentum": ("Импульс 12 баров", "Г. Антонесси — импульсные системы"),
     "engulfing": ("Поглощение (прайс-экшн)", "Э. Брукс — Торговля по прайс-экшн"),
+    "volodya_meta": ("Володя (авторская)", "Собственная мета-стратегия: статистика рынка + голоса библиотеки"),
 }
 
 REF_TF_ORDER = ("M15", "M30", "M5", "H1", "H4", "M1", "D1")
@@ -230,7 +234,47 @@ def vote_all(tf_candles: Dict[str, List[Candle]],
             v = {"vote": "SELL", "strength": 0.6}
     votes["engulfing"] = v
 
+    # 13. VOLODYA meta-strategy (proprietary) -------------------------------- #
+    # Built from the same real data: rolling z-score, EMA-20 slope, RSI
+    # position and the agreement of the 12 classic strategies above.
+    v = _neut()
+    if n >= 25:
+        win = closes[-20:]
+        mean = sum(win) / 20.0
+        std = (sum((x - mean) ** 2 for x in win) / 20.0) ** 0.5
+        z = (close - mean) / std if std else 0.0
+        ema20 = ta.ema(closes, 20)
+        slope = 0.0
+        if ema20[-1] is not None and ema20[-6] is not None and close:
+            slope = (ema20[-1] - ema20[-6]) / close * 10000.0  # in points
+        r_now = rsi[-1] if rsi[-1] is not None else 50.0
+        agree = sum(1 for vv in votes.values() if vv["vote"] == "BUY") - \
+            sum(1 for vv in votes.values() if vv["vote"] == "SELL")
+        score = (0.40 * max(-1.0, min(1.0, agree / 6.0)) +
+                 0.30 * max(-1.0, min(1.0, slope / 3.0)) +
+                 0.20 * ((r_now - 50.0) / 50.0) -
+                 0.10 * max(-1.0, min(1.0, z / 2.0)))
+        if score >= 0.25:
+            v = {"vote": "BUY", "strength": min(1.0, abs(score) + 0.2)}
+        elif score <= -0.25:
+            v = {"vote": "SELL", "strength": min(1.0, abs(score) + 0.2)}
+    votes["volodya_meta"] = v
+
     return votes
+
+
+def dominant_side(votes: Dict[str, Dict],
+                  weights: Optional[Dict[str, float]] = None,
+                  min_net: float = 0.9, min_votes: int = 4):
+    """Return (side, agg) when the library shows a clear weighted dominance."""
+    agg = aggregate(votes, weights)
+    side = agg["side"]
+    if side not in ("BUY", "SELL"):
+        return None, agg
+    n = agg["buy_n"] if side == "BUY" else agg["sell_n"]
+    if abs(agg["net"]) >= min_net and n >= min_votes:
+        return side, agg
+    return None, agg
 
 
 def aggregate(votes: Dict[str, Dict],

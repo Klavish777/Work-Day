@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
+from agents import strategy_library as slib
 from agents.common import ask_llm, compact
 from core.models import (AccountView, MarketAnalysis, PositionView,
                          RiskVerdict, StrategySignal, SymbolView, Tick)
@@ -49,8 +50,16 @@ class RiskAnalystAgent:
             rejects.append(f"Strategy Trader proposes {strategy.action}, "
                            "nothing to approve.")
         elif market.signal != strategy.action:
-            rejects.append(f"Agents contradict each other: market "
-                           f"{market.signal} vs strategy {strategy.action}.")
+            # a strategy signal backed by a clear dominance of the strategy
+            # library is accepted even when the Market Analyst is neutral
+            backed = False
+            votes = getattr(market, "strategies", None)
+            if votes:
+                lside, _ = slib.dominant_side(votes)
+                backed = (lside == strategy.action)
+            if not backed:
+                rejects.append(f"Agents contradict each other: market "
+                               f"{market.signal} vs strategy {strategy.action}.")
         elif strategy.confidence < min_conf:
             rejects.append(f"Signal too weak: confidence "
                            f"{strategy.confidence:.2f} < required {min_conf}.")

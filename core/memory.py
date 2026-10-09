@@ -23,6 +23,11 @@ LOG = logging.getLogger("workday.memory")
 SCHEMA = 1
 EWMA_ALPHA = 0.25          # responsiveness of the learning curve
 WEIGHT_MIN, WEIGHT_MAX = 0.25, 2.0
+# Volodya self-tuning: wins lower the entry threshold slightly, losses
+# raise it. Clamped so the brain can never become reckless.
+VOL_PARAMS = {"entry_net": 1.2}
+TUNE_WIN, TUNE_LOSS = 0.97, 1.04
+ENTRY_NET_MIN, ENTRY_NET_MAX = 0.9, 2.2
 
 
 class AgentMemory:
@@ -35,7 +40,8 @@ class AgentMemory:
                             "baseline": {"closed": 0, "wins": 0,
                                          "losses": 0, "pnl": 0.0},
                             "strategies": {},
-                            "entries": {}}
+                            "entries": {},
+                            "volodya": dict(VOL_PARAMS)}
         self._load()
 
     # ------------------------------------------------------------------ #
@@ -104,6 +110,13 @@ class AgentMemory:
             else:
                 self._data["entries"].pop(str(ticket), None)
 
+            # Volodya self-tuning: adjust the entry threshold from the outcome
+            v = self._data.setdefault("volodya", dict(VOL_PARAMS))
+            factor = TUNE_WIN if profit > 0 else TUNE_LOSS
+            v["entry_net"] = round(max(ENTRY_NET_MIN,
+                                       min(ENTRY_NET_MAX,
+                                           v.get("entry_net", 1.2) * factor)), 3)
+
             outcome = 1.0 if win else -1.0
             for name in names:
                 s = self._strat(name)
@@ -122,6 +135,10 @@ class AgentMemory:
         with self._lock:
             return {name: float(s.get("weight", 1.0))
                     for name, s in self._data.get("strategies", {}).items()}
+
+    def get_params(self) -> Dict:
+        with self._lock:
+            return dict(self._data.setdefault("volodya", dict(VOL_PARAMS)))
 
     def summary(self) -> Dict:
         with self._lock:

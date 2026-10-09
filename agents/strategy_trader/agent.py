@@ -14,6 +14,7 @@ import logging
 from typing import Dict, List, Optional
 
 from agents import indicators as ta
+from agents import strategy_library as slib
 from agents.common import (ask_llm, compact, price_distance_for_profit,
                            profit_for_price_distance)
 from core.models import (Candle, MarketAnalysis, PositionView, StrategySignal,
@@ -50,6 +51,18 @@ class StrategyTraderAgent:
             return StrategySignal(action="HOLD", reason="No live tick data.")
 
         side = market.signal
+        lib_note = ""
+        lib_conf = 0.0
+        if side not in ("BUY", "SELL"):
+            votes = getattr(market, "strategies", None)
+            if votes:
+                lside, agg = slib.dominant_side(votes)
+                if lside:
+                    side = lside
+                    lib_conf = round(min(0.9, 0.40 + 0.05 * abs(agg["net"])), 3)
+                    lib_note = (f" Сигнал библиотеки стратегий (Володя): "
+                                f"{agg['buy_n']} за BUY / {agg['sell_n']} за "
+                                f"SELL, взвешенный счёт {agg['net']:+.2f}.")
         if side not in ("BUY", "SELL"):
             return StrategySignal(
                 action="HOLD",
@@ -108,9 +121,10 @@ class StrategyTraderAgent:
 
         min_conf = float(settings.get("min_confidence", 0.65))
         min_rr = float(settings.get("min_risk_reward", 1.2))
-        action = side if (market.confidence >= min_conf and rr >= min_rr) else "HOLD"
+        base_conf = max(market.confidence, lib_conf)
+        action = side if (base_conf >= min_conf and rr >= min_rr) else "HOLD"
 
-        confidence = round(min(0.97, market.confidence *
+        confidence = round(min(0.97, base_conf *
                                (0.85 + 0.15 * min(rr, 2.0) / 2.0)), 3)
         det = StrategySignal(
             action=action,
@@ -120,12 +134,12 @@ class StrategyTraderAgent:
             tp_usd=round(tp_usd, 2),
             sl_usd=round(sl_usd, 2),
             risk_reward=round(rr, 2),
-            confidence=confidence if action != "HOLD" else round(market.confidence, 3),
-            reason=(f"{side} plan: entry {entry:.5f}, TP +{tp_dist:.5f} "
-                    f"(~${tp_usd:.2f}), SL -{sl_dist:.5f} (~${sl_usd:.2f}), "
-                    f"R:R {rr:.2f}. Market confidence {market.confidence:.2f}."
+            confidence=confidence if action != "HOLD" else round(base_conf, 3),
+            reason=((f"{side} plan: entry {entry:.5f}, TP +{tp_dist:.5f} "
+                     f"(~${tp_usd:.2f}), SL -{sl_dist:.5f} (~${sl_usd:.2f}), "
+                     f"R:R {rr:.2f}. Confidence {base_conf:.2f}.") + lib_note
                     if action != "HOLD" else
-                    f"HOLD: confidence {market.confidence:.2f} < {min_conf} or "
+                    f"HOLD: confidence {base_conf:.2f} < {min_conf} or "
                     f"R:R {rr:.2f} < {min_rr}."),
             exit_conditions=(f"Auto-close at profit >= ${tp_usd:.2f}; protective "
                              f"close at loss >= ${sl_usd:.2f}; early exit on "

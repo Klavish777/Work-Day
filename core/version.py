@@ -8,7 +8,7 @@ Convention (прототип):
 """
 
 APP_NAME = "Work-Day AI Trader"
-APP_VERSION = "1.9"
+APP_VERSION = "2.0"
 
 
 def label() -> str:

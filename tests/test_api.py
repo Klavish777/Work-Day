@@ -116,6 +116,16 @@ def test_status_exposes_agent_memory_and_catalog(client):
     assert "strategy_catalog" in d and "ema_cross" in d["strategy_catalog"]
 
 
+def test_quick_endpoint_for_fast_dashboard(client):
+    c, _ = client
+    r = c.get("/api/quick")
+    assert r.status_code == 200
+    d = r.json()
+    for key in ("engine_state", "mt5_status", "tick", "account",
+                "position", "mode"):
+        assert key in d
+
+
 def test_demo_connect_auto_starts_engine(client):
     c, engine = client
     assert engine.engine_state == "STOPPED"
