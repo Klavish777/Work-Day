@@ -126,6 +126,9 @@ input:focus, select:focus { outline: 1px solid var(--blue); }
   border: 1px solid var(--border); padding: 6px 10px; border-radius: 8px; cursor: pointer;
 }
 .detail { margin-top: 10px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+.howto { font-size: 12px; color: var(--muted); line-height: 1.7; background: var(--card2); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.howto b { color: var(--text); }
+.server-label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
 .danger { border-color: rgba(239,68,68,.4); }
 .danger p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
 

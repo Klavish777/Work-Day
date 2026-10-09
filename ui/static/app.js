@@ -4,6 +4,7 @@
 const $ = (id) => document.getElementById(id);
 
 let LAST_STATUS = null;
+let pendingRealServer = null;
 const TF_LIST = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"];
 const LLM_AGENTS = [["market_analyst", "Market Analyst"],
                     ["strategy_trader", "Strategy Trader"],
@@ -229,6 +230,12 @@ function fillSettings(s) {
   $("cfg-terminal").value = m.terminal_path || "";
   $("cfg-login").value = m.login || "";
   $("cfg-server").value = m.server || "";
+  // reflect the saved server in the Bybit preset dropdown
+  const sel = $("cfg-server-select");
+  if (sel) {
+    const known = [...sel.options].some(o => o.value === m.server);
+    sel.value = known ? m.server : "__custom";
+  }
 }
 
 async function saveSettings(showResult = true) {
@@ -282,6 +289,23 @@ function bindControls() {
   $("btn-start").onclick = () => api("/api/engine/start", "POST");
   $("btn-pause").onclick = () => api("/api/engine/pause", "POST");
   $("btn-stop").onclick = () => api("/api/engine/stop", "POST");
+
+  // Bybit TradFi server preset: picks the server and syncs DEMO/REAL mode
+  const sel = $("cfg-server-select");
+  if (sel) {
+    sel.onchange = () => {
+      const v = sel.value;
+      if (v === "__custom") return;
+      $("cfg-server").value = v;
+      const needReal = /^bybit-live/i.test(v);
+      if (needReal && (!LAST_STATUS || LAST_STATUS.settings.mode !== "REAL")) {
+        pendingRealServer = v;
+        openRealModal();
+      } else if (!needReal && LAST_STATUS && LAST_STATUS.settings.mode === "REAL") {
+        setMode("DEMO");  // Bybit-Demo forces demo mode
+      }
+    };
+  }
   $("btn-close-pos").onclick = async () => {
     if (confirm("Close the open position now?")) await api("/api/position/close", "POST");
   };
@@ -335,6 +359,11 @@ async function setMode(mode, confirmPhrase = "") {
   });
   if (!r.ok) alert((r.data && r.data.errors || ["Failed"]).join("; "));
   $("modal-real").classList.add("hidden");
+  // keep the server field in sync after a REAL confirmation
+  if (mode === "REAL" && pendingRealServer) {
+    $("cfg-server").value = pendingRealServer;
+    pendingRealServer = null;
+  }
 }
 function openRealModal() { $("modal-real").classList.remove("hidden"); }
 async function confirmReal() {

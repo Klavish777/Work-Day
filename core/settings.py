@@ -150,6 +150,20 @@ class SettingsManager:
             if candidate.get("mode") == "DEMO":
                 candidate["real_confirmed"] = False
 
+            # Bybit TradFi servers are hard-linked to the account mode:
+            # Bybit-Demo => DEMO, Bybit-Live* => REAL (confirmed).
+            server_name = str(candidate.get("mt5", {}).get("server", "")
+                              ).strip().lower()
+            if server_name.startswith("bybit-live"):
+                if candidate.get("mode") != "REAL":
+                    return False, [
+                        "Сервер реальный (Bybit-Live*): переключите режим в "
+                        "REAL с подтверждением."
+                    ], self.get()
+            elif server_name.startswith("bybit-demo"):
+                candidate["mode"] = "DEMO"
+                candidate["real_confirmed"] = False
+
             validated, errors = self._validate(candidate)
             if errors:
                 return False, errors, self.get()

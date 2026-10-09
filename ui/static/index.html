@@ -112,12 +112,32 @@
   <!-- ===================== SETTINGS ===================== -->
   <section id="tab-settings" class="tab">
     <div class="card wide">
-      <div class="label">MT5 CONNECTION</div>
+      <div class="label">MT5 CONNECTION — BYBIT TRADFI</div>
+      <div class="howto">
+        <b>Как подключиться к Bybit (раздел TradFi):</b><br>
+        1. Установите терминал MetaTrader 5 на этот компьютер.<br>
+        2. В приложении Bybit: <b>TradFi → MT5-аккаунт</b> → создайте демо или
+        реальный счёт → скопируйте <b>MT5 ID</b> и <b>пароль</b>.<br>
+        3. Выберите сервер ниже: <b>Bybit-Demo</b> = демо, <b>Bybit-Live…Live7</b> = реальные деньги.
+      </div>
+      <label class="server-label">Сервер Bybit
+        <select id="cfg-server-select">
+          <option value="Bybit-Demo">Bybit-Demo (ДЕМО)</option>
+          <option value="Bybit-Live">Bybit-Live (РЕАЛ)</option>
+          <option value="Bybit-Live2">Bybit-Live2 (РЕАЛ)</option>
+          <option value="Bybit-Live3">Bybit-Live3 (РЕАЛ)</option>
+          <option value="Bybit-Live4">Bybit-Live4 (РЕАЛ)</option>
+          <option value="Bybit-Live5">Bybit-Live5 (РЕАЛ)</option>
+          <option value="Bybit-Live6">Bybit-Live6 (РЕАЛ)</option>
+          <option value="Bybit-Live7">Bybit-Live7 (РЕАЛ)</option>
+          <option value="__custom">Другой сервер (ввести вручную)</option>
+        </select>
+      </label>
       <div class="form-grid">
         <label>Terminal path (optional)<input id="cfg-terminal" type="text" placeholder="C:\Program Files\MetaTrader 5\terminal64.exe"></label>
-        <label>Login<input id="cfg-login" type="text" inputmode="numeric"></label>
-        <label>Password<input id="cfg-password" type="password"></label>
-        <label>Server<input id="cfg-server" type="text" placeholder="Broker-Demo"></label>
+        <label>MT5 Login (MT5 ID из Bybit)<input id="cfg-login" type="text" inputmode="numeric"></label>
+        <label>MT5 Password<input id="cfg-password" type="password"></label>
+        <label>Server<input id="cfg-server" type="text" placeholder="Bybit-Demo"></label>
       </div>
       <div class="btn-grid">
         <button id="btn-mt5-connect" class="btn green">CONNECT MT5</button>

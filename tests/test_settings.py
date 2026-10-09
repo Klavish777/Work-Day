@@ -33,6 +33,23 @@ def test_invalid_timeframes_rejected(tmp_path):
     assert not ok
 
 
+def test_bybit_live_server_requires_real_mode(tmp_path):
+    sm = make_sm(tmp_path)
+    ok, errors, _ = sm.update({"mt5": {"server": "Bybit-Live2"}})
+    assert not ok and any("REAL" in e for e in errors)
+    ok, errors, s = sm.update({"mt5": {"server": "Bybit-Live2"},
+                               "mode": "REAL",
+                               "real_confirm": REAL_CONFIRMATION_PHRASE})
+    assert ok and s["mode"] == "REAL" and s["mt5"]["server"] == "Bybit-Live2"
+
+
+def test_bybit_demo_server_forces_demo_mode(tmp_path):
+    sm = make_sm(tmp_path)
+    sm.update({"mode": "REAL", "real_confirm": REAL_CONFIRMATION_PHRASE})
+    ok, errors, s = sm.update({"mt5": {"server": "Bybit-Demo"}})
+    assert ok and s["mode"] == "DEMO" and s["real_confirmed"] is False
+
+
 def test_real_mode_requires_phrase(tmp_path):
     sm = make_sm(tmp_path)
     ok, errors, s = sm.update({"mode": "REAL"})
