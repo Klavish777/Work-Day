@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/user/Work-Day/desktop/launcher.py", line 218, in <module>
+    main()
+  File "/home/user/Work-Day/desktop/launcher.py", line 68, in main
+    from core.engine import TradingEngine
+  File "/home/user/Work-Day/core/engine.py", line 272
+    tf_candles[tf] dles = self.gw.candles(symbol, tf, 220)
+                   ^^^^
+SyntaxError: invalid syntax

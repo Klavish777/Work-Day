@@ -126,6 +126,16 @@ def test_quick_endpoint_for_fast_dashboard(client):
         assert key in d
 
 
+def test_chart_endpoint(client):
+    c, _ = client
+    r = c.get("/api/chart")
+    assert r.status_code == 200
+    d = r.json()
+    for key in ("t", "p", "entry", "side", "symbol"):
+        assert key in d
+    assert isinstance(d["t"], list) and isinstance(d["p"], list)
+
+
 def test_demo_connect_auto_starts_engine(client):
     c, engine = client
     assert engine.engine_state == "STOPPED"

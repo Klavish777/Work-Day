@@ -14,6 +14,7 @@ import logging
 import queue
 import threading
 import time
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from agents.market_analyst.agent import MarketAnalystAgent
@@ -48,6 +49,8 @@ class TradingEngine(threading.Thread):
         self._stop_event = threading.Event()
         self._last_cycle_ts = 0.0
         self._known_tickets: Dict[int, Dict[str, Any]] = {}
+        # live price history for the dashboard chart (~25 min at 5 Hz)
+        self.tick_history: deque = deque(maxlen=7500)
         # last MT5 connection attempt: {ts, ok, detail} — surfaced in the UI
         self.last_connect: Optional[Dict[str, Any]] = None
 
@@ -183,6 +186,11 @@ class TradingEngine(threading.Thread):
             self._known_tickets[p.ticket] = {
                 "profit": p.profit, "side": p.side, "lot": p.lot,
                 "votes": prev.get("votes", [])}
+
+        # chart history: remember every live mid-price
+        if tick is not None:
+            self.tick_history.append(
+                (tick.time or time.time(), (tick.bid + tick.ask) / 2.0))
 
     # ------------------------------------------------------------------ #
     def _monitor_positions(self) -> None:

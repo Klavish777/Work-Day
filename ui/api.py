@@ -121,6 +121,26 @@ def create_app(engine, settings_mgr, journal, gateway,
             "mode": (settings_mgr.get().get("mode") or "DEMO"),
         }
 
+    @app.get("/api/chart")
+    def chart():
+        """Live mid-price history for the dashboard chart."""
+        hist = getattr(engine, "tick_history", None)
+        t: list = []
+        p: list = []
+        if hist:
+            for ts, mid in list(hist):
+                t.append(round(ts, 2))
+                p.append(round(mid, 5))
+        snap = engine.state.snapshot()
+        pos = snap.get("position") or {}
+        return {
+            "t": t,
+            "p": p,
+            "entry": pos.get("open_price"),
+            "side": pos.get("side"),
+            "symbol": snap.get("symbol") or "AUDCAD",
+        }
+
     # ------------------------------------------------------------------ #
     @app.post("/api/mt5/connect")
     def mt5_connect(body: MT5ConnectBody):

@@ -34,56 +34,64 @@
 </div>
 
 <main>
-  <!-- ===================== DASHBOARD ===================== -->
+  <!-- ===================== DASHBOARD (app-like, no page scroll) ========= -->
   <section id="tab-dashboard" class="tab active">
-    <div class="grid">
-      <div class="card price-card">
-        <div class="label" data-i18n="price_label">ТЕКУЩАЯ ЦЕНА</div>
-        <div class="big" id="price">—</div>
-        <div class="row-inline">
-          <span><span data-i18n="bid">БИД</span> <b id="bid">—</b></span>
-          <span><span data-i18n="ask">АСК</span> <b id="ask">—</b></span>
-          <span><span data-i18n="spread">СПРЕД</span> <b id="spread">—</b></span>
+    <div class="dash-grid">
+      <!-- left column: price + account/position -->
+      <div class="col-left">
+        <div class="card price-card">
+          <div class="label" data-i18n="price_label">ТЕКУЩАЯ ЦЕНА</div>
+          <div class="big" id="price">—</div>
+          <div class="row-inline">
+            <span><span data-i18n="bid">БИД</span> <b id="bid">—</b></span>
+            <span><span data-i18n="ask">АСК</span> <b id="ask">—</b></span>
+            <span><span data-i18n="spread">СПРЕД</span> <b id="spread">—</b></span>
+          </div>
+        </div>
+        <div class="card account-card">
+          <div class="label"><span data-i18n="account_label">СЧЁТ</span> <span id="account-type" class="tag"></span></div>
+          <div class="acc-row"><span data-i18n="balance">БАЛАНС</span><b id="balance">—</b></div>
+          <div class="acc-row"><span data-i18n="equity">ЭКВИТИ</span><b id="equity">—</b></div>
+          <div class="acc-row"><span data-i18n="open_position">ПОЗИЦИЯ</span><b id="position">—</b></div>
+          <div class="acc-row"><span data-i18n="current_pl">ТЕКУЩИЙ P/L</span><b id="pl" class="pl-zero">$0.00</b></div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="label"><span data-i18n="account_label">СЧЁТ</span> <span id="account-type" class="tag"></span></div>
-        <div class="row-inline">
-          <span><span data-i18n="balance">БАЛАНС</span> <b id="balance">—</b></span>
-          <span><span data-i18n="equity">ЭКВИТИ</span> <b id="equity">—</b></span>
+      <!-- center: live price chart -->
+      <div class="card chart-card">
+        <div class="label">
+          <span data-i18n="chart_label">ГРАФИК AUD/CAD — LIVE</span>
+          <span id="chart-range" class="muted small"></span>
         </div>
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
       </div>
 
-      <div class="card">
-        <div class="label" data-i18n="open_position">ОТКРЫТАЯ ПОЗИЦИЯ</div>
-        <div class="big" id="position">—</div>
-        <div><span data-i18n="current_pl">ТЕКУЩИЙ P/L</span>: <b id="pl" class="pl-zero">$0.00</b></div>
-      </div>
-
+      <!-- right column: AI pipeline -->
       <div class="card pipeline">
         <div class="label" data-i18n="ai_pipeline">AI КОНВЕЙЕР</div>
         <div class="pipe-row"><span class="pipe-name" data-i18n="ai_market">РЫНОК (AI)</span><span id="ai-market" class="pill gray">—</span></div>
         <div class="pipe-row"><span class="pipe-name" data-i18n="strategy">СТРАТЕГИЯ</span><span id="ai-strategy" class="pill gray">—</span></div>
         <div class="pipe-row"><span class="pipe-name" data-i18n="risk">РИСК</span><span id="ai-risk" class="pill gray">—</span></div>
-        <div class="pipe-row"><span class="pipe-name" data-i18n="llm_decision">РЕШЕНИЕ LLM</span><span id="ai-llm" class="pill gray">—</span></div>
+        <div class="pipe-row"><span class="pipe-name" data-i18n="llm_decision">РЕШЕНИЕ · ВОЛОДЯ</span><span id="ai-llm" class="pill gray">—</span></div>
         <div class="pipe-row"><span class="pipe-name" data-i18n="confidence">УВЕРЕННОСТЬ</span><span id="confidence" class="pill gray">—</span></div>
       </div>
 
-      <div class="card wide strategies-card">
-        <div class="label" data-i18n="strategies_label">AI СТРАТЕГИИ — БИБЛИОТЕКА И ПАМЯТЬ АГЕНТОВ</div>
-        <div id="strat-votes" class="strat-grid"></div>
-        <div id="memory-note" class="skip-note"></div>
-      </div>
-
-      <div class="card wide">
-        <div class="label" data-i18n="llm_reason">ПРИЧИНА РЕШЕНИЯ LLM</div>
+      <!-- middle row: Volodya reasoning + strategy library -->
+      <div class="card volodya-card">
+        <div class="label" data-i18n="llm_reason">ПРИЧИНА РЕШЕНИЯ</div>
         <div id="reason" class="reason"></div>
         <div id="why-not" class="skip-note"></div>
         <div id="skip-note" class="skip-note"></div>
       </div>
 
-      <div class="card wide controls">
+      <div class="card strategies-card">
+        <div class="label" data-i18n="strategies_label">AI СТРАТЕГИИ — БИБЛИОТЕКА И ПАМЯТЬ АГЕНТОВ</div>
+        <div id="strat-votes" class="strat-grid compact"></div>
+        <div id="memory-note" class="skip-note"></div>
+      </div>
+
+      <!-- bottom row: controls + compact stats -->
+      <div class="card controls">
         <div class="label" data-i18n="control">УПРАВЛЕНИЕ</div>
         <div class="btn-grid">
           <button id="btn-start" class="btn green">▶ <span data-i18n="btn_start">СТАРТ</span></button>
@@ -95,9 +103,9 @@
         </div>
       </div>
 
-      <div class="card wide stats-card">
+      <div class="card stats-card">
         <div class="label" data-i18n="stats_label">СТАТИСТИКА (СЕГОДНЯ / ВСЕГО)</div>
-        <div class="stats-grid" id="stats-grid"></div>
+        <div class="stats-grid compact" id="stats-grid"></div>
       </div>
     </div>
   </section>
@@ -143,7 +151,7 @@
       <div class="form-grid">
         <label><span data-i18n="terminal_path">Путь к терминалу (необязательно)</span><input id="cfg-terminal" type="text" placeholder="C:\Program Files\MetaTrader 5\terminal64.exe"></label>
         <label><span data-i18n="mt5_login">Логин MT5 (ID счёта)</span><input id="cfg-login" type="text" inputmode="numeric"></label>
-        <label><span data-i18n="mt5_password">Пароль MT5</span><input id="cfg-password" type="password"></label>
+        <label><span data-i18n="mt5_password">Пароль MT5 (запоминается)</span><input id="cfg-password" type="password"></label>
         <label><span data-i18n="server_input">Сервер</span><input id="cfg-server" type="text" placeholder="MetaQuotes-Demo"></label>
       </div>
       <div class="btn-grid">

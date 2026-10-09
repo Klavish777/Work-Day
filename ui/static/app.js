@@ -66,6 +66,7 @@ const I18N = {
     why_blocked: "⛔ Риск-менеджер: ", why_gate: "⛔ Гейт: ",
     why_wait: "⏳ Ожидание сигнала: ",
     strategies_label: "AI СТРАТЕГИИ — БИБЛИОТЕКА И ПАМЯТЬ АГЕНТОВ",
+    chart_label: "ГРАФИК AUD/CAD — LIVE",
     mem_note: "Память агентов: ", mem_closed: "закрытых сделок из истории",
     mem_wins: "прибыльных", mem_losses: "убыточных",
     mem_learn: "Агенты запоминают каждую сделку и автоматически пересчитывают веса стратегий.",
@@ -132,6 +133,7 @@ const I18N = {
     why_blocked: "⛔ Risk manager: ", why_gate: "⛔ Gate: ",
     why_wait: "⏳ Waiting for a signal: ",
     strategies_label: "AI STRATEGIES — LIBRARY & AGENT MEMORY",
+    chart_label: "AUD/CAD CHART — LIVE",
     mem_note: "Agent memory: ", mem_closed: "closed trades from history",
     mem_wins: "winners", mem_losses: "losers",
     mem_learn: "Agents remember every trade and re-weight the strategies automatically.",
@@ -422,6 +424,119 @@ function renderQuick(s) {
 }
 
 // --------------------------------------------------------------------- //
+// Live price chart (canvas, Apple style)
+// --------------------------------------------------------------------- //
+let CHART_DATA = null;
+
+async function fetchChart() {
+  try {
+    const r = await api("/api/chart");
+    if (r.ok && r.data) { CHART_DATA = r.data; drawChart(); }
+  } catch (e) { /* ignore */ }
+}
+
+function drawChart() {
+  const canvas = $("chart");
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (w < 10 || h < 10) return;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    canvas.width = w * dpr; canvas.height = h * dpr;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const d = CHART_DATA;
+  if (!d || !d.p || d.p.length < 2) {
+    ctx.fillStyle = "#98989d";
+    ctx.font = "13px -apple-system, 'Segoe UI', sans-serif";
+    ctx.fillText(LANG === "ru"
+      ? "Ожидание данных от MT5… (подключитесь к терминалу)"
+      : "Waiting for MT5 data… (connect to the terminal)", 14, h / 2);
+    return;
+  }
+
+  const padL = 8, padR = 62, padT = 10, padB = 20;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+  let min = Math.min(...d.p), max = Math.max(...d.p);
+  if (max - min < 1e-5) { min -= 0.0002; max += 0.0002; }
+  const span = max - min;
+  min -= span * 0.08; max += span * 0.08;
+
+  const X = i => padL + (i / (d.p.length - 1)) * plotW;
+  const Y = v => padT + (1 - (v - min) / (max - min)) * plotH;
+
+  // grid + price labels
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.fillStyle = "#98989d";
+  ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
+  ctx.textAlign = "left";
+  const rows = 4;
+  for (let g = 0; g <= rows; g++) {
+    const v = min + ((max - min) * g) / rows;
+    const y = Y(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    ctx.fillText(v.toFixed(5), padL + plotW + 8, y + 3.5);
+  }
+
+  // area + line
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+  grad.addColorStop(0, "rgba(10,132,255,0.32)");
+  grad.addColorStop(1, "rgba(10,132,255,0.0)");
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(d.p[0]));
+  for (let i = 1; i < d.p.length; i++) ctx.lineTo(X(i), Y(d.p[i]));
+  ctx.lineTo(X(d.p.length - 1), padT + plotH);
+  ctx.lineTo(X(0), padT + plotH);
+  ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(d.p[0]));
+  for (let i = 1; i < d.p.length; i++) ctx.lineTo(X(i), Y(d.p[i]));
+  ctx.strokeStyle = "#0a84ff"; ctx.lineWidth = 1.8;
+  ctx.lineJoin = "round"; ctx.stroke();
+
+  // entry price line (open position)
+  if (d.entry && d.entry >= min && d.entry <= max) {
+    const y = Y(d.entry);
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = d.side === "BUY" ? "#30d158" : "#ff453a";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = d.side === "BUY" ? "#30d158" : "#ff453a";
+    ctx.fillText((LANG === "ru" ? "вход " : "entry ") + d.entry.toFixed(5),
+                 padL + 4, y - 5);
+  }
+
+  // last price dot
+  const lx = X(d.p.length - 1), ly = Y(d.p[d.p.length - 1]);
+  ctx.beginPath(); ctx.arc(lx, ly, 3.4, 0, Math.PI * 2);
+  ctx.fillStyle = "#0a84ff"; ctx.fill();
+  ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(10,132,255,0.25)"; ctx.fill();
+
+  // time range caption
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit"});
+  const range = $("chart-range");
+  if (range) range.textContent = fmt(d.t[0]) + " — " + fmt(d.t[d.t.length - 1]);
+}
+
+function setupChart() {
+  const canvas = $("chart");
+  if (canvas && "ResizeObserver" in window) {
+    new ResizeObserver(() => drawChart()).observe(canvas);
+  }
+  window.addEventListener("resize", () => drawChart());
+  fetchChart();
+  setInterval(fetchChart, 1500);
+}
+
+// --------------------------------------------------------------------- //
 async function pollStatus() {
   try {
     const r = await api("/api/status");
@@ -666,6 +781,7 @@ async function init() {
   setInterval(pollStatus, 2000);
   pollQuick();
   setInterval(pollQuick, 100);   // fastest practical UI refresh
+  setupChart();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
