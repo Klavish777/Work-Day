@@ -114,14 +114,19 @@
     <div class="card wide">
       <div class="label">MT5 CONNECTION — BYBIT TRADFI</div>
       <div class="howto">
-        <b>Как подключиться к Bybit (раздел TradFi):</b><br>
+        <b>Как подключиться:</b><br>
         1. Установите терминал MetaTrader 5 на этот компьютер.<br>
-        2. В приложении Bybit: <b>TradFi → MT5-аккаунт</b> → создайте демо или
-        реальный счёт → скопируйте <b>MT5 ID</b> и <b>пароль</b>.<br>
-        3. Выберите сервер ниже: <b>Bybit-Demo</b> = демо, <b>Bybit-Live…Live7</b> = реальные деньги.
+        2. Получите данные счёта:<br>
+        &nbsp;&nbsp;• <b>Bybit TradFi</b>: в приложении Bybit → TradFi → MT5-аккаунт →
+        скопируйте <b>MT5 ID</b> и <b>пароль</b>.<br>
+        &nbsp;&nbsp;• <b>MetaQuotes-Demo</b>: в терминале MT5 → Файл → Открыть счёт →
+        найдите «MetaQuotes» → создайте демо-счёт → используйте выданные
+        <b>логин и пароль</b> (виртуальные $, идеально для теста).<br>
+        3. Выберите сервер ниже: <b>*-Demo</b> = демо, <b>Bybit-Live…Live7</b> = реальные деньги.
       </div>
-      <label class="server-label">Сервер Bybit
+      <label class="server-label">Сервер
         <select id="cfg-server-select">
+          <option value="MetaQuotes-Demo">MetaQuotes-Demo (ДЕМО — счёт создаётся в терминале)</option>
           <option value="Bybit-Demo">Bybit-Demo (ДЕМО)</option>
           <option value="Bybit-Live">Bybit-Live (РЕАЛ)</option>
           <option value="Bybit-Live2">Bybit-Live2 (РЕАЛ)</option>

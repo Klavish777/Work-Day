@@ -50,6 +50,13 @@ def test_bybit_demo_server_forces_demo_mode(tmp_path):
     assert ok and s["mode"] == "DEMO" and s["real_confirmed"] is False
 
 
+def test_metaquotes_demo_server_forces_demo_mode(tmp_path):
+    sm = make_sm(tmp_path)
+    sm.update({"mode": "REAL", "real_confirm": REAL_CONFIRMATION_PHRASE})
+    ok, errors, s = sm.update({"mt5": {"server": "MetaQuotes-Demo"}})
+    assert ok and s["mode"] == "DEMO" and s["real_confirmed"] is False
+
+
 def test_real_mode_requires_phrase(tmp_path):
     sm = make_sm(tmp_path)
     ok, errors, s = sm.update({"mode": "REAL"})
