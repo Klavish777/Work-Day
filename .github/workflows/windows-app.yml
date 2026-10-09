@@ -60,18 +60,26 @@ jobs:
 
       - name: Smoke test (run the real EXE)
         run: |
-          & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --version
-          & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --selftest --port 8099
-          $code = $LASTEXITCODE
+          $exe = ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe"
+          $p1 = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru -NoNewWindow
+          Write-Host "version exit=$($p1.ExitCode)"
+          $p2 = Start-Process -FilePath $exe -ArgumentList "--selftest","--port","8099" -Wait -PassThru -NoNewWindow
           Start-Sleep -Seconds 2
+          $ok = $true
           if (Test-Path ".\dist\selftest-result.txt") {
             $result = Get-Content ".\dist\selftest-result.txt" -Raw
-            Write-Host $result
-            if ($code -ne 0) { Write-Host "::error::selftest failed: $result" }
+            Write-Host "selftest(exit=$($p2.ExitCode)): $result"
+            if ($result -notmatch "^SELFTEST OK") { $ok = $false }
           } else {
-            Write-Host "::error::selftest produced no result file (exit=$code)"
+            Write-Host "no selftest-result.txt (exit=$($p2.ExitCode))"
+            $ok = $false
           }
-          if ($code -ne 0) { throw "selftest failed with exit code $code" }
+          if (Test-Path ".\dist\crash-report.txt") {
+            $crash = Get-Content ".\dist\crash-report.txt" -Raw
+            Write-Host "::error::crash report: $crash"
+            $ok = $false
+          }
+          if (-not $ok) { throw "smoke test failed (exit=$($p2.ExitCode))" }
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4

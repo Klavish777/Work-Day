@@ -104,7 +104,10 @@ def main() -> None:
     import uvicorn
     app = create_app(engine, settings_mgr, journal, gateway,
                      update_state=UPDATE_STATE)
-    config = uvicorn.Config(app, host=host, port=port, log_level="warning")
+    # explicit implementations: avoid lazy imports that a frozen build
+    # might not bundle (the dashboard uses polling, no websockets needed)
+    config = uvicorn.Config(app, host=host, port=port, log_level="warning",
+                            loop="asyncio", http="h11", ws="none")
     server = uvicorn.Server(config)
     threading.Thread(target=server.run, daemon=True, name="UIServer").start()
 
@@ -173,5 +176,30 @@ def main() -> None:
     os._exit(0)
 
 
+def _crash_report() -> None:
+    """Write any unhandled exception next to the executable so that CI (and
+    users) can see WHY a windowed build died."""
+    import traceback
+    text = traceback.format_exc()
+    try:
+        base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+            else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "crash-report.txt"), "w",
+                  encoding="utf-8") as f:
+            f.write(text)
+    except OSError:
+        pass
+    try:
+        print(text, flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001
+        _crash_report()
+        os._exit(3)
