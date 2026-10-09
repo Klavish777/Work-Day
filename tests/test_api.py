@@ -95,6 +95,19 @@ def test_mt5_password_never_leaks(client):
     assert "secret" not in c.get("/api/status").text
 
 
+def test_connect_attempt_is_reported(client):
+    c, engine = client
+    r = c.post("/api/mt5/connect", json={"login": "1", "password": "x",
+                                         "server": "MetaQuotes-Demo",
+                                         "terminal_path": ""})
+    assert r.status_code == 200
+    engine._process_commands()
+    assert engine.last_connect is not None
+    assert engine.last_connect["ok"] is False  # no MetaTrader5 on Linux
+    d = c.get("/api/status").json()
+    assert d["last_connect"]["ok"] is False
+
+
 def test_close_endpoints_queue_commands(client):
     c, _ = client
     assert c.post("/api/position/close").status_code == 200

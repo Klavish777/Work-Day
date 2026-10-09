@@ -64,8 +64,14 @@ function renderStatus(s) {
   LAST_STATUS = s;
   renderUpdateBanner(s);
 
-  // live MT5 connection result on the settings card
-  const detLine = `MT5 ${s.mt5.status}${s.mt5.detail ? " — " + s.mt5.detail : ""}`;
+  // live MT5 connection result on the settings card:
+  // the outcome of the latest connection attempt always wins
+  let detLine = `MT5 ${s.mt5.status}${s.mt5.detail ? " — " + s.mt5.detail : ""}`;
+  if (s.last_connect) {
+    const when = new Date(s.last_connect.ts * 1000).toLocaleTimeString();
+    detLine = (s.last_connect.ok ? "✓ " : "✗ ") +
+              (s.last_connect.detail || "no details") + `  [${when}]`;
+  }
   if (detLine !== lastMt5DetailShown) {
     lastMt5DetailShown = detLine;
     const el = $("mt5-detail");

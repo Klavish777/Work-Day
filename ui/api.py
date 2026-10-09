@@ -66,6 +66,7 @@ def create_app(engine, settings_mgr, journal, gateway,
             "real_phrase": REAL_CONFIRMATION_PHRASE,
             "app_name": APP_NAME,
             "version": APP_VERSION,
+            "last_connect": getattr(engine, "last_connect", None),
             "update": dict(update_state) if update_state is not None else
                       {"checked": False, "has_update": False},
         }

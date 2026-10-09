@@ -45,6 +45,8 @@ class TradingEngine(threading.Thread):
         self._stop_event = threading.Event()
         self._last_cycle_ts = 0.0
         self._known_tickets: Dict[int, Dict[str, Any]] = {}
+        # last MT5 connection attempt: {ts, ok, detail} — surfaced in the UI
+        self.last_connect: Optional[Dict[str, Any]] = None
 
         llm_flags = settings_mgr.get()["llm"]["agents"]
         self.market_agent = MarketAnalystAgent(provider, llm_flags)
@@ -118,7 +120,12 @@ class TradingEngine(threading.Thread):
                 self.journal.db.log_event("INFO", "engine",
                                           f"State changed to {self.engine_state}")
             elif t == "connect":
-                ok, msg = self.gw.connect(cmd.get("cfg", {}))
+                try:
+                    ok, msg = self.gw.connect(cmd.get("cfg", {}))
+                except Exception as exc:  # noqa: BLE001
+                    ok, msg = False, f"unexpected connect error: {exc}"
+                self.last_connect = {"ts": time.time(), "ok": bool(ok),
+                                     "detail": str(msg)}
                 self.journal.db.log_event("INFO" if ok else "ERROR", "mt5", msg)
             elif t == "disconnect":
                 self.gw.disconnect()
