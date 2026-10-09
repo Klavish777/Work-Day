@@ -82,6 +82,16 @@ if ("serviceWorker" in navigator) {
             </button>
           </span>
         </div>
+        <div class="chart-tfs" id="chart-tfs">
+          <button data-tf="S1" title="Секунда">1с</button>
+          <button data-tf="S5" class="active" title="5 секунд">5с</button>
+          <button data-tf="S15" title="15 секунд">15с</button>
+          <button data-tf="S30" title="30 секунд">30с</button>
+          <button data-tf="M1" title="Минута">1м</button>
+          <button data-tf="M15" title="15 минут">15м</button>
+          <button data-tf="H1" title="Час">1ч</button>
+          <button data-tf="H4" title="4 часа">4ч</button>
+        </div>
         <div class="chart-wrap"><canvas id="chart"></canvas></div>
         <div class="chart-hint" id="chart-hint" data-i18n="chart_hint">Колесо — масштаб · перетаскивание — прокрутка · двойной клик — к эфиру</div>
       </div>
@@ -112,7 +122,12 @@ if ("serviceWorker" in navigator) {
 
       <!-- bottom row: controls + compact stats -->
       <div class="card controls">
-        <div class="label" data-i18n="control">УПРАВЛЕНИЕ</div>
+        <div class="label"><span data-i18n="control">УПРАВЛЕНИЕ</span>
+          <span class="muted small" data-i18n="manual_hint">· ручная торговля: BUY/SELL</span></div>
+        <div class="btn-grid trade-row">
+          <button id="btn-buy" class="btn trade-buy">▲ BUY</button>
+          <button id="btn-sell" class="btn trade-sell">▼ SELL</button>
+        </div>
         <div class="btn-grid">
           <button id="btn-start" class="btn green">▶ <span data-i18n="btn_start">СТАРТ</span></button>
           <button id="btn-pause" class="btn amber">⏸ <span data-i18n="btn_pause">ПАУЗА</span></button>

@@ -32,6 +32,10 @@ class MT5ConnectBody(BaseModel):
     server: str = ""
 
 
+class ManualTradeBody(BaseModel):
+    side: str = "BUY"
+
+
 def create_app(engine, settings_mgr, journal, gateway,
                update_state=None) -> FastAPI:
     app = FastAPI(title="Work-Day AI Trader", version=APP_VERSION)
@@ -140,6 +144,20 @@ def create_app(engine, settings_mgr, journal, gateway,
             "side": pos.get("side"),
             "symbol": snap.get("symbol") or "AUDCAD",
         }
+
+    @app.get("/api/chart/candles")
+    def chart_candles(tf: str = "S5", count: int = 400):
+        """Candles for the chart timeframe selector.
+        S1/S5/S15/S30 are aggregated from live ticks; M1..H4 come from MT5."""
+        return engine.chart_candles(tf, count)
+
+    @app.post("/api/trade/manual")
+    def manual_trade(body: ManualTradeBody):
+        """Manual BUY/SELL trading button of the trading bot."""
+        side = (body.side or "").upper()
+        if side not in ("BUY", "SELL"):
+            raise HTTPException(400, "side must be BUY or SELL")
+        return engine.cmd_manual_trade(side)
 
     # ------------------------------------------------------------------ #
     @app.post("/api/mt5/connect")

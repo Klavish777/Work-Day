@@ -21,6 +21,7 @@ from agents.market_analyst.agent import MarketAnalystAgent
 from agents.risk_analyst.agent import RiskAnalystAgent
 from agents.strategy_trader.agent import StrategyTraderAgent
 from agents import strategy_library as slib
+from agents.common import price_distance_for_profit
 from core.appstate import AppState
 from core.decision_engine import CentralDecisionEngine
 from core.memory import AgentMemory
@@ -51,6 +52,8 @@ class TradingEngine(threading.Thread):
         self._known_tickets: Dict[int, Dict[str, Any]] = {}
         # live price history for the dashboard chart (~25 min at 5 Hz)
         self.tick_history: deque = deque(maxlen=7500)
+        # short cache for the MT5-based chart timeframes
+        self._chart_cache: Dict[str, Any] = {}
         # last MT5 connection attempt: {ts, ok, detail} — surfaced in the UI
         self.last_connect: Optional[Dict[str, Any]] = None
 
@@ -89,6 +92,16 @@ class TradingEngine(threading.Thread):
 
     def cmd_close_all(self) -> None:
         self._cmd.put({"type": "close_all"})
+
+    def cmd_manual_trade(self, side: str) -> Dict[str, Any]:
+        """Manual BUY/SELL from the dashboard. Runs in the engine thread and
+        returns the execution result synchronously (for UI feedback)."""
+        q: "queue.Queue[Dict[str, Any]]" = queue.Queue()
+        self._cmd.put({"type": "manual_trade", "side": side, "result": q})
+        try:
+            return q.get(timeout=12)
+        except queue.Empty:
+            return {"ok": False, "error": "Движок не ответил (таймаут)."}
 
     def cmd_connect_mt5(self, cfg: Dict[str, str]) -> None:
         self._cmd.put({"type": "connect", "cfg": cfg})
@@ -161,6 +174,12 @@ class TradingEngine(threading.Thread):
                 self._manual_close(all_positions=False)
             elif t == "close_all":
                 self._manual_close(all_positions=True)
+            elif t == "manual_trade":
+                res = self._manual_open(str(cmd.get("side", "")).upper())
+                try:
+                    cmd.get("result").put(res)
+                except Exception:  # noqa: BLE001
+                    pass
 
     # ------------------------------------------------------------------ #
     def _refresh_market_state(self) -> None:
@@ -247,6 +266,113 @@ class TradingEngine(threading.Thread):
                     p.ticket, p.profit,
                     self._known_tickets.get(p.ticket, {}).get("votes") or None)
                 self._known_tickets.pop(p.ticket, None)
+
+    # ------------------------------------------------------------------ #
+    # Manual trading (BUY / SELL buttons on the dashboard)
+    # ------------------------------------------------------------------ #
+    def _manual_open(self, side: str) -> Dict[str, Any]:
+        settings = self.settings_mgr.get()
+        symbol = settings.get("symbol", "AUDCAD")
+        if side not in ("BUY", "SELL"):
+            return {"ok": False, "error": "Неверная сторона: только BUY или SELL."}
+        if self.gw.status != "CONNECTED":
+            return {"ok": False,
+                    "error": "MT5 не подключён — сначала подключите терминал."}
+        if settings.get("mode") == "REAL" and not settings.get("real_confirmed"):
+            return {"ok": False, "error": "Режим REAL не подтверждён пользователем."}
+
+        tick = self.gw.tick(symbol)
+        sym = self.gw.symbol_view(symbol)
+        if tick is None:
+            return {"ok": False, "error": "Нет живых тиковых данных."}
+
+        lot = float(settings.get("lot_size", 0.01))
+        point = sym.point if sym else 0.00001
+        price = tick.ask if side == "BUY" else tick.bid
+
+        # TP / SL from user settings (points override, else $ targets)
+        tp_price = sl_price = 0.0
+        tp_points = float(settings.get("take_profit_points", 0) or 0)
+        sl_points = float(settings.get("stop_loss_points", 0) or 0)
+        if tp_points > 0:
+            d = tp_points * point
+            tp_price = price + d if side == "BUY" else price - d
+        else:
+            d = price_distance_for_profit(
+                sym, lot, float(settings.get("profit_target_usd", 0.5)))
+            if d:
+                tp_price = price + d if side == "BUY" else price - d
+        if sl_points > 0:
+            d = sl_points * point
+            sl_price = price - d if side == "BUY" else price + d
+        else:
+            d = price_distance_for_profit(
+                sym, lot, float(settings.get("stop_loss_usd", 1.0)))
+            if d:
+                sl_price = price - d if side == "BUY" else price + d
+
+        result = self.execution.open_position(
+            side, lot, sl_price, tp_price, "MANUAL: ручная сделка пользователя")
+        if not result.get("ok"):
+            errs = result.get("errors") or ["исполнение отклонено"]
+            return {"ok": False, "error": "; ".join(str(e) for e in errs)}
+
+        ticket = result.get("ticket")
+        report = CycleReport(engine_state="MANUAL", mt5_status=self.gw.status)
+        self.journal.record_open(
+            report, ticket, symbol, side, lot,
+            result.get("price", price), "MANUAL: ручная сделка пользователя")
+        self.journal.db.log_event("INFO", "manual",
+                                  f"Manual {side} #{ticket} lot {lot}")
+        return {"ok": True, "ticket": ticket, "side": side,
+                "price": result.get("price")}
+
+    # ------------------------------------------------------------------ #
+    # Chart data: second-based TFs from tick history, MT5 TFs from terminal
+    # ------------------------------------------------------------------ #
+    SEC_TIMEFRAMES = {"S1": 1, "S5": 5, "S15": 15, "S30": 30}
+
+    def chart_candles(self, tf: str, count: int = 400) -> Dict[str, Any]:
+        tf = (tf or "S5").upper()
+        count = max(30, min(900, int(count or 400)))
+        if tf in self.SEC_TIMEFRAMES:
+            return {"tf": tf, "source": "ticks",
+                    "candles": self._ticks_to_candles(self.SEC_TIMEFRAMES[tf],
+                                                      count)}
+        now = time.time()
+        cached = self._chart_cache.get(tf)
+        if cached and now - cached[0] < 2.0:
+            return {"tf": tf, "source": "mt5", "candles": cached[1]}
+        symbol = self.settings_mgr.get().get("symbol", "AUDCAD")
+        candles = None
+        if self.gw.status == "CONNECTED":
+            try:
+                candles = self.gw.candles(symbol, tf, count)
+            except Exception as exc:  # noqa: BLE001
+                self.log.warning("Chart candles %s failed: %s", tf, exc)
+        out = [{"t": c.time, "o": c.open, "h": c.high, "l": c.low,
+                "c": c.close} for c in candles or []]
+        self._chart_cache[tf] = (now, out)
+        return {"tf": tf, "source": "mt5", "candles": out}
+
+    def _ticks_to_candles(self, step: int, count: int) -> List[Dict[str, float]]:
+        buckets: Dict[int, List[float]] = {}
+        order: List[int] = []
+        for ts, mid in self.tick_history:
+            b = int(ts // step) * step
+            e = buckets.get(b)
+            if e is None:
+                buckets[b] = [mid, mid, mid, mid]
+                order.append(b)
+            else:
+                if mid > e[1]:
+                    e[1] = mid
+                if mid < e[2]:
+                    e[2] = mid
+                e[3] = mid
+        out = [{"t": b, "o": buckets[b][0], "h": buckets[b][1],
+                "l": buckets[b][2], "c": buckets[b][3]} for b in order]
+        return out[-count:]
 
     # ------------------------------------------------------------------ #
     def _cycle(self) -> None:

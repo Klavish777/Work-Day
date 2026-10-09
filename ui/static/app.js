@@ -69,6 +69,7 @@ const I18N = {
     chart_label: "ГРАФИК AUD/CAD",
     chart_hint: "Колесо — масштаб · перетаскивание — прокрутка · двойной клик — к эфиру",
     chart_history: "ИСТОРИЯ",
+    manual_hint: "· ручная торговля: BUY/SELL",
     cmd_sent: "Команда отправлена",
     cmd_err: "Ошибка",
     mem_note: "Память агентов: ", mem_closed: "закрытых сделок из истории",
@@ -140,6 +141,7 @@ const I18N = {
     chart_label: "AUD/CAD CHART",
     chart_hint: "Wheel — zoom · drag — scroll · double-click — back to live",
     chart_history: "HISTORY",
+    manual_hint: "· manual trading: BUY/SELL",
     cmd_sent: "Command sent",
     cmd_err: "Error",
     mem_note: "Agent memory: ", mem_closed: "closed trades from history",
@@ -386,6 +388,7 @@ async function pollQuick() {
 }
 
 function renderQuick(s) {
+  LAST_QUICK = s;
   const mt5Badge = $("badge-mt5");
   const mstat = s.mt5_status || "—";
   mt5Badge.textContent = "MT5: " + mstat;
@@ -403,6 +406,11 @@ function renderQuick(s) {
   $("btn-start").disabled = (st === "RUNNING");
   $("btn-pause").disabled = (st !== "RUNNING");
   $("btn-stop").disabled = (st === "STOPPED");
+
+  // manual BUY/SELL available only when no position is open
+  const hasPos = !!(s.position && s.position.ticket);
+  $("btn-buy").disabled = hasPos;
+  $("btn-sell").disabled = hasPos;
 
   const mode = s.mode || "DEMO";
   const modeBadge = $("badge-mode");
@@ -437,11 +445,14 @@ function renderQuick(s) {
 }
 
 // --------------------------------------------------------------------- //
-// Live price chart (canvas, Apple style): zoom, pan/scroll, time axis
+// Candlestick chart with timeframe switcher (1s..4h), zoom, pan, LIVE
 // --------------------------------------------------------------------- //
-let CHART_DATA = null;
+let CHART_TF = "S5";
+let CHART_CANDLES = [];      // [{t,o,h,l,c}, ...]
 let CHART_VIEW = { zoom: 1, offset: 0 };   // offset = bars back from live
 let CHART_DRAG = null;
+let CHART_TIMER = null;
+let LAST_QUICK = null;
 
 function chartLiveState() {
   const btn = $("chart-live");
@@ -452,11 +463,31 @@ function chartLiveState() {
   $("chart-live-text").textContent = live ? "LIVE" : t("chart_history");
 }
 
-async function fetchChart() {
+function chartIntervalMs() {
+  if (CHART_TF.startsWith("S")) return 1000;
+  if (CHART_TF === "M1") return 2000;
+  return 5000;
+}
+
+async function fetchCandles() {
   try {
-    const r = await api("/api/chart");
-    if (r.ok && r.data) { CHART_DATA = r.data; drawChart(); }
+    const r = await api(`/api/chart/candles?tf=${CHART_TF}&count=500`);
+    if (r.ok && r.data) { CHART_CANDLES = r.data.candles || []; drawChart(); }
   } catch (e) { /* ignore */ }
+}
+
+function restartChartTimer() {
+  if (CHART_TIMER) clearInterval(CHART_TIMER);
+  CHART_TIMER = setInterval(fetchCandles, chartIntervalMs());
+}
+
+function selectTf(tf) {
+  CHART_TF = tf;
+  CHART_VIEW = { zoom: 1, offset: 0 };
+  document.querySelectorAll("#chart-tfs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tf === tf));
+  fetchCandles();
+  restartChartTimer();
 }
 
 function drawChart() {
@@ -473,33 +504,32 @@ function drawChart() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  const d = CHART_DATA;
-  if (!d || !d.p || d.p.length < 2) {
+  const total = CHART_CANDLES.length;
+  if (total < 2) {
     ctx.fillStyle = "#98989d";
     ctx.font = "13px -apple-system, 'Segoe UI', sans-serif";
     ctx.fillText(LANG === "ru"
-      ? "Ожидание данных от MT5… (подключитесь к терминалу)"
-      : "Waiting for MT5 data… (connect to the terminal)", 14, h / 2);
+      ? "Ожидание данных… (подключите MT5; секундные таймфреймы наполняются с момента запуска)"
+      : "Waiting for data… (connect MT5; second timeframes fill since app start)",
+      14, h / 2);
     return;
   }
 
-  const total = d.p.length;
-  const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
-  const end = Math.max(Math.min(visible, total), total - CHART_VIEW.offset);
+  const visible = Math.max(15, Math.floor(total / CHART_VIEW.zoom));
+  const end = total - CHART_VIEW.offset;
   const start = Math.max(0, end - visible);
-  const P = d.p.slice(start, end);
-  const T = d.t.slice(start, end);
-  const n = P.length;
+  const C = CHART_CANDLES.slice(start, end);
+  const n = C.length;
   if (n < 2) return;
 
   const padL = 8, padR = 62, padT = 10, padB = 24;
   const plotW = w - padL - padR, plotH = h - padT - padB;
-  let min = Math.min(...P), max = Math.max(...P);
+  let min = Math.min(...C.map(c => c.l)), max = Math.max(...C.map(c => c.h));
   if (max - min < 1e-5) { min -= 0.0002; max += 0.0002; }
   const span = max - min;
   min -= span * 0.08; max += span * 0.08;
 
-  const X = i => padL + (i / (n - 1)) * plotW;
+  const X = i => padL + ((i + 0.5) / n) * plotW;   // candle center
   const Y = v => padT + (1 - (v - min) / (max - min)) * plotH;
 
   ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
@@ -508,86 +538,83 @@ function drawChart() {
   ctx.strokeStyle = "rgba(255,255,255,0.07)";
   ctx.fillStyle = "#98989d";
   ctx.textAlign = "left";
-  const rows = 4;
-  for (let g = 0; g <= rows; g++) {
-    const v = min + ((max - min) * g) / rows;
+  for (let g = 0; g <= 4; g++) {
+    const v = min + ((max - min) * g) / 4;
     const y = Y(v);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
     ctx.fillText(v.toFixed(5), padL + plotW + 8, y + 3.5);
   }
 
-  // vertical grid + TIME labels (timings)
+  // vertical grid + time labels (timings)
   ctx.textAlign = "center";
+  const useSec = CHART_TF.startsWith("S");
   const ticks = Math.max(2, Math.min(6, Math.floor(plotW / 130)));
   for (let g = 0; g <= ticks; g++) {
     const i = Math.round((g / ticks) * (n - 1));
     const x = X(i);
     ctx.strokeStyle = "rgba(255,255,255,0.05)";
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
-    const when = new Date(T[i] * 1000);
-    const lbl = CHART_VIEW.zoom > 6
+    const when = new Date(C[i].t * 1000);
+    const lbl = useSec
       ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
       : when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     ctx.fillStyle = "#98989d";
-    ctx.fillText(lbl, Math.max(padL + 22, Math.min(x, padL + plotW - 22)), h - 8);
+    ctx.fillText(lbl, Math.max(padL + 26, Math.min(x, padL + plotW - 26)), h - 8);
   }
 
-  // area + line
-  const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-  grad.addColorStop(0, "rgba(10,132,255,0.32)");
-  grad.addColorStop(1, "rgba(10,132,255,0.0)");
-  ctx.beginPath();
-  ctx.moveTo(X(0), Y(P[0]));
-  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(P[i]));
-  ctx.lineTo(X(n - 1), padT + plotH);
-  ctx.lineTo(X(0), padT + plotH);
-  ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(X(0), Y(P[0]));
-  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(P[i]));
-  ctx.strokeStyle = "#0a84ff"; ctx.lineWidth = 1.8;
-  ctx.lineJoin = "round"; ctx.stroke();
+  // candles
+  const cw = Math.max(1.5, Math.min(15, (plotW / n) * 0.62));
+  for (let i = 0; i < n; i++) {
+    const c = C[i];
+    const up = c.c >= c.o;
+    const col = up ? "#30d158" : "#ff453a";
+    const x = X(i);
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, Y(c.h)); ctx.lineTo(x, Y(c.l)); ctx.stroke();
+    const yO = Y(c.o), yC = Y(c.c);
+    const top = Math.min(yO, yC), bh = Math.max(1, Math.abs(yC - yO));
+    ctx.fillStyle = col;
+    ctx.fillRect(x - cw / 2, top, cw, bh);
+  }
 
   // entry price line (open position)
-  if (d.entry && d.entry >= min && d.entry <= max) {
-    const y = Y(d.entry);
+  const pos = LAST_QUICK && LAST_QUICK.position;
+  if (pos && pos.open_price >= min && pos.open_price <= max) {
+    const y = Y(pos.open_price);
     ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = d.side === "BUY" ? "#30d158" : "#ff453a";
+    ctx.strokeStyle = pos.side === "BUY" ? "#30d158" : "#ff453a";
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
     ctx.setLineDash([]);
     ctx.textAlign = "left";
-    ctx.fillStyle = d.side === "BUY" ? "#30d158" : "#ff453a";
-    ctx.fillText((LANG === "ru" ? "вход " : "entry ") + d.entry.toFixed(5),
+    ctx.fillStyle = pos.side === "BUY" ? "#30d158" : "#ff453a";
+    ctx.fillText((LANG === "ru" ? "вход " : "entry ") + Number(pos.open_price).toFixed(5),
                  padL + 4, y - 5);
   }
 
-  // last price dot only when watching live
+  // live cursor on the last candle
   if (CHART_VIEW.offset === 0) {
-    const lx = X(n - 1), ly = Y(P[n - 1]);
-    ctx.beginPath(); ctx.arc(lx, ly, 3.4, 0, Math.PI * 2);
+    const last = C[n - 1];
+    const lx = X(n - 1), ly = Y(last.c);
+    ctx.beginPath(); ctx.arc(lx, ly, 3.2, 0, Math.PI * 2);
     ctx.fillStyle = "#0a84ff"; ctx.fill();
-    ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(lx, ly, 6.5, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(10,132,255,0.25)"; ctx.fill();
   }
 
   // time range caption
-  const fmt = ts => new Date(ts * 1000).toLocaleTimeString([], {
-    hour: "2-digit", minute: "2-digit"});
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString([], useSec
+    ? { hour: "2-digit", minute: "2-digit", second: "2-digit" }
+    : { hour: "2-digit", minute: "2-digit" });
   const range = $("chart-range");
-  if (range) range.textContent = fmt(T[0]) + " — " + fmt(T[n - 1]);
+  if (range) range.textContent = fmt(C[0].t) + " — " + fmt(C[n - 1].t);
 }
 
 function chartClampView() {
-  const total = (CHART_DATA && CHART_DATA.p) ? CHART_DATA.p.length : 0;
+  const total = CHART_CANDLES.length;
   CHART_VIEW.zoom = Math.max(1, Math.min(32, CHART_VIEW.zoom));
-  const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
-  CHART_VIEW.offset = Math.max(0, Math.min(total - 2, CHART_VIEW.offset));
-  if (total - CHART_VIEW.offset < visible) {
-    /* allowed: window just shows fewer bars near live */
-  }
+  CHART_VIEW.offset = Math.max(0, Math.min(Math.max(0, total - 2),
+                                           CHART_VIEW.offset));
 }
 
 function setupChart() {
@@ -604,9 +631,9 @@ function setupChart() {
     canvas.style.cursor = "grabbing";
   });
   window.addEventListener("mousemove", (e) => {
-    if (!CHART_DRAG || !CHART_DATA || !CHART_DATA.p.length) return;
-    const total = CHART_DATA.p.length;
-    const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
+    if (!CHART_DRAG || !CHART_CANDLES.length) return;
+    const total = CHART_CANDLES.length;
+    const visible = Math.max(15, Math.floor(total / CHART_VIEW.zoom));
     const barsPerPx = visible / Math.max(1, canvas.clientWidth);
     CHART_VIEW.offset = CHART_DRAG.offset +
       Math.round((e.clientX - CHART_DRAG.x) * barsPerPx);
@@ -632,9 +659,14 @@ function setupChart() {
   const liveBtn = $("chart-live");
   if (liveBtn) liveBtn.onclick = goLive;
 
+  // timeframe switcher
+  document.querySelectorAll("#chart-tfs button").forEach(b => {
+    b.onclick = () => selectTf(b.dataset.tf);
+  });
+
   canvas.style.cursor = "grab";
-  fetchChart();
-  setInterval(fetchChart, 1500);
+  fetchCandles();
+  restartChartTimer();
 }
 
 // --------------------------------------------------------------------- //
@@ -654,6 +686,17 @@ async function cmd(path, label) {
   else showToast("✗ " + label + ": " + t("cmd_err") + " " +
                  JSON.stringify(r.data || ""), true);
   return r;
+}
+
+async function manualTrade(side) {
+  const r = await api("/api/trade/manual", "POST", { side });
+  const d = r.data || {};
+  if (r.ok && d.ok) {
+    showToast(`✓ ${side} #${d.ticket} @ ${Number(d.price).toFixed(5)}`);
+  } else {
+    const msg = d.error || d.detail || JSON.stringify(d);
+    showToast(`✗ ${side}: ${msg}`, true);
+  }
 }
 
 // --------------------------------------------------------------------- //
@@ -805,6 +848,10 @@ function bindControls() {
   // ONE-CLICK close: no confirmation dialogs
   $("btn-close-pos").onclick = () => cmd("/api/position/close", t("btn_close_pos"));
   $("btn-close-all").onclick = () => cmd("/api/position/close-all", t("btn_close_all"));
+
+  // MANUAL trading: BUY / SELL buttons of the trading bot
+  $("btn-buy").onclick = () => manualTrade("BUY");
+  $("btn-sell").onclick = () => manualTrade("SELL");
 
   $("btn-mode").onclick = () => {
     const mode = (LAST_STATUS && LAST_STATUS.settings.mode) || "DEMO";
