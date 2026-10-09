@@ -103,9 +103,10 @@ def test_connect_attempt_is_reported(client):
     assert r.status_code == 200
     engine._process_commands()
     assert engine.last_connect is not None
-    assert engine.last_connect["ok"] is False  # no MetaTrader5 on Linux
+    assert engine.last_connect["ok"] is True      # FakeGateway connects
+    assert "fake" in engine.last_connect["detail"].lower()
     d = c.get("/api/status").json()
-    assert d["last_connect"]["ok"] is False
+    assert d["last_connect"]["ok"] is True
 
 
 def test_close_endpoints_queue_commands(client):
