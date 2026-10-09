@@ -65,6 +65,11 @@ const I18N = {
     stat_avg_win: "Средний профит", stat_avg_loss: "Средний убыток",
     why_blocked: "⛔ Риск-менеджер: ", why_gate: "⛔ Гейт: ",
     why_wait: "⏳ Ожидание сигнала: ",
+    strategies_label: "AI СТРАТЕГИИ — БИБЛИОТЕКА И ПАМЯТЬ АГЕНТОВ",
+    mem_note: "Память агентов: ", mem_closed: "закрытых сделок из истории",
+    mem_wins: "прибыльных", mem_losses: "убыточных",
+    mem_learn: "Агенты запоминают каждую сделку и автоматически пересчитывают веса стратегий.",
+    strat_trades: "сделок",
     update_avail: "Доступно обновление: ", you_have: " (у вас prototip v",
     saved: "✓ Сохранено.",
     connecting: "Подключение…", queued: "Запрос на подключение поставлен в очередь.",
@@ -126,6 +131,11 @@ const I18N = {
     stat_avg_win: "Avg win", stat_avg_loss: "Avg loss",
     why_blocked: "⛔ Risk manager: ", why_gate: "⛔ Gate: ",
     why_wait: "⏳ Waiting for a signal: ",
+    strategies_label: "AI STRATEGIES — LIBRARY & AGENT MEMORY",
+    mem_note: "Agent memory: ", mem_closed: "closed trades from history",
+    mem_wins: "winners", mem_losses: "losers",
+    mem_learn: "Agents remember every trade and re-weight the strategies automatically.",
+    strat_trades: "trades",
     update_avail: "Update available: ", you_have: " (you have prototip v",
     saved: "✓ Saved.",
     connecting: "Connecting…", queued: "Connection request queued.",
@@ -284,6 +294,8 @@ function renderStatus(s) {
   }
   $("skip-note").textContent = (s.skipped_reason && (!c || !c.market)) ? s.skipped_reason : "";
 
+  renderStrategies(s);
+
   // why is the bot not trading right now?
   let why = "";
   if (c && !s.position) {
@@ -299,6 +311,41 @@ function renderStatus(s) {
   $("why-not").textContent = why;
 
   renderStats(s.stats);
+}
+
+let LAST_CATALOG = {};
+
+function renderStrategies(s) {
+  const box = $("strat-votes");
+  const votes = (s.last_cycle && s.last_cycle.market &&
+                 s.last_cycle.market.strategies) || null;
+  const mem = s.agent_memory || {};
+  const stats = mem.strategies || {};
+  if (s.strategy_catalog) LAST_CATALOG = s.strategy_catalog;
+  if (!votes) {
+    box.innerHTML = "";
+  } else {
+    box.innerHTML = Object.keys(votes).map(name => {
+      const v = votes[name] || {};
+      const cat = LAST_CATALOG[name] || [name, ""];
+      const st = stats[name];
+      const cls = v.vote === "BUY" ? "buy" : v.vote === "SELL" ? "sell" : "gray";
+      const arrow = v.vote === "BUY" ? "▲" : v.vote === "SELL" ? "▼" : "•";
+      const w = st ? `×${st.weight}` : "";
+      const perf = (st && st.trades) ? `${st.trades} ${t("strat_trades")}` : "";
+      return `<div class="strat-chip" title="${cat[1]}">
+        <span class="strat-name">${cat[0]}</span>
+        <span class="pill ${cls}">${arrow} ${v.vote}</span>
+        ${w ? `<span class="strat-w">${w}</span>` : ""}
+        ${perf ? `<span class="strat-perf">${perf}</span>` : ""}
+      </div>`;
+    }).join("");
+  }
+  const b = mem.baseline;
+  $("memory-note").textContent = b ?
+    `${t("mem_note")}${b.closed} ${t("mem_closed")} ` +
+    `(${b.wins} ${t("mem_wins")}, ${b.losses} ${t("mem_losses")}, ` +
+    `P/L ${fmtMoney(b.pnl)}). ${t("mem_learn")}` : "";
 }
 
 function renderStats(stats) {

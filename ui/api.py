@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agents import strategy_library as slib
 from core.paths import STATIC_DIR
 from core.settings import REAL_CONFIRMATION_PHRASE
 from core.version import APP_NAME, APP_VERSION
@@ -67,6 +68,9 @@ def create_app(engine, settings_mgr, journal, gateway,
             "app_name": APP_NAME,
             "version": APP_VERSION,
             "last_connect": getattr(engine, "last_connect", None),
+            "agent_memory": getattr(engine, "memory", None) and
+                            engine.memory.summary(),
+            "strategy_catalog": slib.CATALOG,
             "update": dict(update_state) if update_state is not None else
                       {"checked": False, "has_update": False},
         }

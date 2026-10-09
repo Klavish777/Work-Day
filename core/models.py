@@ -160,6 +160,7 @@ class MarketAnalysis:
     confidence: float = 0.0
     reason: str = ""
     per_timeframe: List[TimeframeAnalysis] = field(default_factory=list)
+    strategies: Dict[str, Any] = field(default_factory=dict)  # library votes
     source: str = "DETERMINISTIC"       # LLM / DETERMINISTIC / LLM_FALLBACK_DETERMINISTIC
     ts: float = field(default_factory=_ts)
 

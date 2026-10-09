@@ -220,3 +220,46 @@ def momentum_pct(closes: Sequence[float], bars: int = 12) -> float:
     if len(closes) <= bars or closes[-bars - 1] == 0:
         return 0.0
     return (closes[-1] / closes[-bars - 1] - 1.0) * 100.0
+
+
+def bollinger(closes: Sequence[float], period: int = 20,
+              num_std: float = 2.0):
+    """Return (mid, upper, lower) series aligned to `closes` (None-padded)."""
+    n = len(closes)
+    mid: List[Optional[float]] = [None] * n
+    up: List[Optional[float]] = [None] * n
+    lo: List[Optional[float]] = [None] * n
+    for i in range(period - 1, n):
+        window = closes[i - period + 1: i + 1]
+        m = sum(window) / period
+        var = sum((x - m) ** 2 for x in window) / period
+        sd = var ** 0.5
+        mid[i] = m
+        up[i] = m + num_std * sd
+        lo[i] = m - num_std * sd
+    return mid, up, lo
+
+
+def stochastic(highs: Sequence[float], lows: Sequence[float],
+               closes: Sequence[float], k_period: int = 14,
+               d_period: int = 3):
+    """Return (%K, %D) for the latest bar (0..100). (None, None) if short."""
+    if len(closes) < k_period:
+        return None, None
+    hh = max(highs[-k_period:])
+    ll = min(lows[-k_period:])
+    if hh == ll:
+        k = 50.0
+    else:
+        k = (closes[-1] - ll) / (hh - ll) * 100.0
+    # %D = simple average of the last d_period %K values
+    ks = []
+    for j in range(d_period):
+        idx = len(closes) - 1 - j
+        if idx < k_period - 1:
+            break
+        h = max(highs[idx - k_period + 1: idx + 1])
+        l = min(lows[idx - k_period + 1: idx + 1])
+        ks.append(50.0 if h == l else (closes[idx] - l) / (h - l) * 100.0)
+    d = sum(ks) / len(ks) if ks else k
+    return k, d

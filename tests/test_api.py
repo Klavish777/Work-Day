@@ -109,6 +109,13 @@ def test_mt5_credentials_remembered(client):
     assert engine.settings_mgr.get()["mt5"]["login"] == "777"
 
 
+def test_status_exposes_agent_memory_and_catalog(client):
+    c, _ = client
+    d = c.get("/api/status").json()
+    assert "agent_memory" in d and "baseline" in d["agent_memory"]
+    assert "strategy_catalog" in d and "ema_cross" in d["strategy_catalog"]
+
+
 def test_demo_connect_auto_starts_engine(client):
     c, engine = client
     assert engine.engine_state == "STOPPED"

@@ -19,8 +19,10 @@ from typing import Any, Dict, List, Optional
 from agents.market_analyst.agent import MarketAnalystAgent
 from agents.risk_analyst.agent import RiskAnalystAgent
 from agents.strategy_trader.agent import StrategyTraderAgent
+from agents import strategy_library as slib
 from core.appstate import AppState
 from core.decision_engine import CentralDecisionEngine
+from core.memory import AgentMemory
 from core.models import CycleReport, EngineState, PositionView
 from core import consensus as consensus_mod
 from execution.engine import ExecutionEngine
@@ -56,6 +58,13 @@ class TradingEngine(threading.Thread):
         self.risk_manager = RiskManager()
         self.execution = ExecutionEngine(gateway, settings_mgr, logger)
         self.monitor = PositionMonitor()
+        # Agents' persistent memory: full trade-history backfill + live
+        # learning of strategy weights from every closed trade.
+        self.memory = AgentMemory()
+        try:
+            self.memory.backfill_from_journal(self.journal.recent_trades(1000))
+        except Exception as exc:  # noqa: BLE001
+            self.log.warning("Memory backfill skipped: %s", exc)
 
     # ------------------------------------------------------------------ #
     # Control API (called from the UI thread; commands run in the loop)
@@ -167,8 +176,10 @@ class TradingEngine(threading.Thread):
         )
         # track known tickets for close detection
         for p in positions:
-            self._known_tickets[p.ticket] = {"profit": p.profit,
-                                             "side": p.side, "lot": p.lot}
+            prev = self._known_tickets.get(p.ticket, {})
+            self._known_tickets[p.ticket] = {
+                "profit": p.profit, "side": p.side, "lot": p.lot,
+                "votes": prev.get("votes", [])}
 
     # ------------------------------------------------------------------ #
     def _monitor_positions(self) -> None:
@@ -187,6 +198,9 @@ class TradingEngine(threading.Thread):
                 self.journal.record_close(
                     ticket, deal["price"] if deal else None, profit,
                     deal["comment"] if deal else "CLOSED_EXTERNALLY")
+                self.memory.on_close(
+                    ticket, profit,
+                    self._known_tickets[ticket].get("votes") or None)
                 self.journal.db.log_event("INFO", "journal",
                                           f"Position #{ticket} closed, "
                                           f"P/L {profit:.2f}")
@@ -199,6 +213,9 @@ class TradingEngine(threading.Thread):
                 if result.get("ok"):
                     self.journal.record_close(p.ticket, result.get("price"),
                                               p.profit, reason)
+                    self.memory.on_close(
+                        p.ticket, p.profit,
+                        self._known_tickets.get(p.ticket, {}).get("votes") or None)
                     self.journal.db.log_event("INFO", "monitor",
                                               f"Closed #{p.ticket}: {reason}")
                     self._known_tickets.pop(p.ticket, None)
@@ -215,6 +232,10 @@ class TradingEngine(threading.Thread):
             if result.get("ok"):
                 self.journal.record_close(p.ticket, result.get("price"),
                                           p.profit, "MANUAL_CLOSE")
+                self.memory.on_close(
+                    p.ticket, p.profit,
+                    self._known_tickets.get(p.ticket, {}).get("votes") or None)
+                self._known_tickets.pop(p.ticket, None)
 
     # ------------------------------------------------------------------ #
     def _cycle(self) -> None:
@@ -252,10 +273,19 @@ class TradingEngine(threading.Thread):
         ]
         sym = self.gw.symbol_view(symbol)
 
+        # --- strategy library: every classic system votes on real candles -- #
+        votes = slib.vote_all(tf_candles, tick)
+
         # --- AI pipeline ------------------------------------------------- #
         report.market = self.market_agent.analyze(symbol, tick, tf_candles)
+        report.market.strategies = votes
         report.strategy = self.strategy_agent.plan(
             report.market, tick, tf_candles, settings, position, sym)
+        agg = slib.aggregate(votes, self.memory.weights())
+        report.strategy.reason += (
+            f" | Библиотека стратегий: {agg['buy_n']} за BUY, "
+            f"{agg['sell_n']} за SELL, взвешенный счёт {agg['net']:+.2f} "
+            f"(веса обучены на истории сделок)")
         report.risk = self.risk_agent.review(
             report.market, report.strategy, account, position, settings,
             recent_trades, tick, sym)
@@ -281,6 +311,10 @@ class TradingEngine(threading.Thread):
                 self.journal.record_close(position.ticket,
                                           result.get("price"), position.profit,
                                           f"LLM_CLOSE: {decision.reason[:120]}")
+                self.memory.on_close(
+                    position.ticket, position.profit,
+                    self._known_tickets.get(position.ticket, {}).get("votes") or None)
+                self._known_tickets.pop(position.ticket, None)
         elif decision.action in ("BUY", "SELL") and position is None:
             report.gate = self.risk_manager.evaluate(
                 settings=settings, engine_state=self.engine_state,
@@ -301,6 +335,13 @@ class TradingEngine(threading.Thread):
                         report, result.get("ticket"), symbol, decision.action,
                         float(settings.get("lot_size", 0.01)),
                         result.get("price", 0.0), decision.reason)
+                    # learning: remember which strategies voted at this entry
+                    ticket = result.get("ticket")
+                    active = [nm for nm, vv in votes.items()
+                              if vv.get("vote") == decision.action]
+                    self.memory.on_entry(ticket, active)
+                    if ticket in self._known_tickets:
+                        self._known_tickets[ticket]["votes"] = active
             else:
                 report.executed = {"action": "BLOCKED_BY_RISK_MANAGER",
                                    "reasons": report.gate.reasons}

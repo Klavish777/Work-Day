@@ -32,6 +32,7 @@ STATIC_DIR = BUNDLE_DIR / "ui" / "static"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 DEFAULT_SETTINGS_FILE = CONFIG_DIR / "settings.default.json"
 DB_FILE = DATA_DIR / "workday.db"
+MEMORY_FILE = DATA_DIR / "agent_memory.json"
 LOG_FILE = LOGS_DIR / "app.log"
 
 
