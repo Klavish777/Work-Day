@@ -1,0 +1,5 @@
+.venv/
+.cache/
+__pycache__/
+*.pyc
+Sia_3_languages_and_characters.zip
