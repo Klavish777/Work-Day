@@ -5,10 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0f17">
 <title>Work-Day AI Trader — AUD/CAD</title>
-<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icons/icon-192.png">
-<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=2.2">
+<script>
+/* v2.2: service-worker caching is permanently disabled — it served stale
+   app.js/style.css and broke the UI controls after updates. */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function (regs) {
+    regs.forEach(function (r) { r.unregister(); });
+  });
+}
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -19,6 +26,11 @@
       <div class="sub">Work-Day · Володя AI · Multi-Agent Trading</div>
     </div>
   </div>
+  <nav class="top-nav">
+    <button data-tab="dashboard" class="active" data-i18n="tab_dashboard">Дашборд</button>
+    <button data-tab="journal" data-i18n="tab_journal">Журнал</button>
+    <button data-tab="settings" data-i18n="tab_settings">Настройки</button>
+  </nav>
   <div class="badges">
     <button id="lang-btn" class="badge gray" title="Language">RU</button>
     <span id="badge-mt5" class="badge gray">MT5: —</span>
@@ -32,6 +44,8 @@
   <a id="update-link" class="btn green" target="_blank" rel="noopener" data-i18n="dl_update">Скачать обновление</a>
   <button id="update-hide" class="btn gray-btn">×</button>
 </div>
+
+<div id="toast" class="toast hidden"></div>
 
 <main>
   <!-- ===================== DASHBOARD (app-like, no page scroll) ========= -->
@@ -60,10 +74,16 @@
       <!-- center: live price chart -->
       <div class="card chart-card">
         <div class="label">
-          <span data-i18n="chart_label">ГРАФИК AUD/CAD — LIVE</span>
-          <span id="chart-range" class="muted small"></span>
+          <span data-i18n="chart_label">ГРАФИК AUD/CAD</span>
+          <span class="chart-tools">
+            <span id="chart-range" class="muted small"></span>
+            <button id="chart-live" class="chart-live live" title="">
+              <span class="dot"></span><span id="chart-live-text">LIVE</span>
+            </button>
+          </span>
         </div>
         <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        <div class="chart-hint" id="chart-hint" data-i18n="chart_hint">Колесо — масштаб · перетаскивание — прокрутка · двойной клик — к эфиру</div>
       </div>
 
       <!-- right column: AI pipeline -->
@@ -232,12 +252,6 @@
   </div>
 </div>
 
-<nav class="bottom-nav">
-  <button data-tab="dashboard" class="active" data-i18n="tab_dashboard">Дашборд</button>
-  <button data-tab="journal" data-i18n="tab_journal">Журнал</button>
-  <button data-tab="settings" data-i18n="tab_settings">Настройки</button>
-</nav>
-
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=2.2"></script>
 </body>
 </html>

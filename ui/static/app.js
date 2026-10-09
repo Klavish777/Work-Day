@@ -66,7 +66,11 @@ const I18N = {
     why_blocked: "⛔ Риск-менеджер: ", why_gate: "⛔ Гейт: ",
     why_wait: "⏳ Ожидание сигнала: ",
     strategies_label: "AI СТРАТЕГИИ — БИБЛИОТЕКА И ПАМЯТЬ АГЕНТОВ",
-    chart_label: "ГРАФИК AUD/CAD — LIVE",
+    chart_label: "ГРАФИК AUD/CAD",
+    chart_hint: "Колесо — масштаб · перетаскивание — прокрутка · двойной клик — к эфиру",
+    chart_history: "ИСТОРИЯ",
+    cmd_sent: "Команда отправлена",
+    cmd_err: "Ошибка",
     mem_note: "Память агентов: ", mem_closed: "закрытых сделок из истории",
     mem_wins: "прибыльных", mem_losses: "убыточных",
     mem_learn: "Агенты запоминают каждую сделку и автоматически пересчитывают веса стратегий.",
@@ -133,7 +137,11 @@ const I18N = {
     why_blocked: "⛔ Risk manager: ", why_gate: "⛔ Gate: ",
     why_wait: "⏳ Waiting for a signal: ",
     strategies_label: "AI STRATEGIES — LIBRARY & AGENT MEMORY",
-    chart_label: "AUD/CAD CHART — LIVE",
+    chart_label: "AUD/CAD CHART",
+    chart_hint: "Wheel — zoom · drag — scroll · double-click — back to live",
+    chart_history: "HISTORY",
+    cmd_sent: "Command sent",
+    cmd_err: "Error",
     mem_note: "Agent memory: ", mem_closed: "closed trades from history",
     mem_wins: "winners", mem_losses: "losers",
     mem_learn: "Agents remember every trade and re-weight the strategies automatically.",
@@ -391,6 +399,11 @@ function renderQuick(s) {
   stBadge.className = "badge " + (st === "RUNNING" ? "green" :
                         st === "PAUSED" ? "amber" : "gray");
 
+  // buttons reflect the real engine state
+  $("btn-start").disabled = (st === "RUNNING");
+  $("btn-pause").disabled = (st !== "RUNNING");
+  $("btn-stop").disabled = (st === "STOPPED");
+
   const mode = s.mode || "DEMO";
   const modeBadge = $("badge-mode");
   modeBadge.textContent = mode + (mode === "REAL" ? " ⚠" : "");
@@ -424,9 +437,20 @@ function renderQuick(s) {
 }
 
 // --------------------------------------------------------------------- //
-// Live price chart (canvas, Apple style)
+// Live price chart (canvas, Apple style): zoom, pan/scroll, time axis
 // --------------------------------------------------------------------- //
 let CHART_DATA = null;
+let CHART_VIEW = { zoom: 1, offset: 0 };   // offset = bars back from live
+let CHART_DRAG = null;
+
+function chartLiveState() {
+  const btn = $("chart-live");
+  if (!btn) return;
+  const live = CHART_VIEW.offset === 0;
+  btn.classList.toggle("live", live);
+  btn.classList.toggle("paused", !live);
+  $("chart-live-text").textContent = live ? "LIVE" : t("chart_history");
+}
 
 async function fetchChart() {
   try {
@@ -438,6 +462,7 @@ async function fetchChart() {
 function drawChart() {
   const canvas = $("chart");
   if (!canvas) return;
+  chartLiveState();
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (w < 10 || h < 10) return;
@@ -458,20 +483,30 @@ function drawChart() {
     return;
   }
 
-  const padL = 8, padR = 62, padT = 10, padB = 20;
+  const total = d.p.length;
+  const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
+  const end = Math.max(Math.min(visible, total), total - CHART_VIEW.offset);
+  const start = Math.max(0, end - visible);
+  const P = d.p.slice(start, end);
+  const T = d.t.slice(start, end);
+  const n = P.length;
+  if (n < 2) return;
+
+  const padL = 8, padR = 62, padT = 10, padB = 24;
   const plotW = w - padL - padR, plotH = h - padT - padB;
-  let min = Math.min(...d.p), max = Math.max(...d.p);
+  let min = Math.min(...P), max = Math.max(...P);
   if (max - min < 1e-5) { min -= 0.0002; max += 0.0002; }
   const span = max - min;
   min -= span * 0.08; max += span * 0.08;
 
-  const X = i => padL + (i / (d.p.length - 1)) * plotW;
+  const X = i => padL + (i / (n - 1)) * plotW;
   const Y = v => padT + (1 - (v - min) / (max - min)) * plotH;
 
-  // grid + price labels
+  ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
+
+  // horizontal grid + price labels
   ctx.strokeStyle = "rgba(255,255,255,0.07)";
   ctx.fillStyle = "#98989d";
-  ctx.font = "11px -apple-system, 'Segoe UI', sans-serif";
   ctx.textAlign = "left";
   const rows = 4;
   for (let g = 0; g <= rows; g++) {
@@ -481,21 +516,37 @@ function drawChart() {
     ctx.fillText(v.toFixed(5), padL + plotW + 8, y + 3.5);
   }
 
+  // vertical grid + TIME labels (timings)
+  ctx.textAlign = "center";
+  const ticks = Math.max(2, Math.min(6, Math.floor(plotW / 130)));
+  for (let g = 0; g <= ticks; g++) {
+    const i = Math.round((g / ticks) * (n - 1));
+    const x = X(i);
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
+    const when = new Date(T[i] * 1000);
+    const lbl = CHART_VIEW.zoom > 6
+      ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    ctx.fillStyle = "#98989d";
+    ctx.fillText(lbl, Math.max(padL + 22, Math.min(x, padL + plotW - 22)), h - 8);
+  }
+
   // area + line
   const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
   grad.addColorStop(0, "rgba(10,132,255,0.32)");
   grad.addColorStop(1, "rgba(10,132,255,0.0)");
   ctx.beginPath();
-  ctx.moveTo(X(0), Y(d.p[0]));
-  for (let i = 1; i < d.p.length; i++) ctx.lineTo(X(i), Y(d.p[i]));
-  ctx.lineTo(X(d.p.length - 1), padT + plotH);
+  ctx.moveTo(X(0), Y(P[0]));
+  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(P[i]));
+  ctx.lineTo(X(n - 1), padT + plotH);
   ctx.lineTo(X(0), padT + plotH);
   ctx.closePath();
   ctx.fillStyle = grad; ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(X(0), Y(d.p[0]));
-  for (let i = 1; i < d.p.length; i++) ctx.lineTo(X(i), Y(d.p[i]));
+  ctx.moveTo(X(0), Y(P[0]));
+  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(P[i]));
   ctx.strokeStyle = "#0a84ff"; ctx.lineWidth = 1.8;
   ctx.lineJoin = "round"; ctx.stroke();
 
@@ -507,33 +558,102 @@ function drawChart() {
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
     ctx.setLineDash([]);
+    ctx.textAlign = "left";
     ctx.fillStyle = d.side === "BUY" ? "#30d158" : "#ff453a";
     ctx.fillText((LANG === "ru" ? "вход " : "entry ") + d.entry.toFixed(5),
                  padL + 4, y - 5);
   }
 
-  // last price dot
-  const lx = X(d.p.length - 1), ly = Y(d.p[d.p.length - 1]);
-  ctx.beginPath(); ctx.arc(lx, ly, 3.4, 0, Math.PI * 2);
-  ctx.fillStyle = "#0a84ff"; ctx.fill();
-  ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(10,132,255,0.25)"; ctx.fill();
+  // last price dot only when watching live
+  if (CHART_VIEW.offset === 0) {
+    const lx = X(n - 1), ly = Y(P[n - 1]);
+    ctx.beginPath(); ctx.arc(lx, ly, 3.4, 0, Math.PI * 2);
+    ctx.fillStyle = "#0a84ff"; ctx.fill();
+    ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(10,132,255,0.25)"; ctx.fill();
+  }
 
   // time range caption
   const fmt = ts => new Date(ts * 1000).toLocaleTimeString([], {
     hour: "2-digit", minute: "2-digit"});
   const range = $("chart-range");
-  if (range) range.textContent = fmt(d.t[0]) + " — " + fmt(d.t[d.t.length - 1]);
+  if (range) range.textContent = fmt(T[0]) + " — " + fmt(T[n - 1]);
+}
+
+function chartClampView() {
+  const total = (CHART_DATA && CHART_DATA.p) ? CHART_DATA.p.length : 0;
+  CHART_VIEW.zoom = Math.max(1, Math.min(32, CHART_VIEW.zoom));
+  const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
+  CHART_VIEW.offset = Math.max(0, Math.min(total - 2, CHART_VIEW.offset));
+  if (total - CHART_VIEW.offset < visible) {
+    /* allowed: window just shows fewer bars near live */
+  }
 }
 
 function setupChart() {
   const canvas = $("chart");
-  if (canvas && "ResizeObserver" in window) {
+  if (!canvas) return;
+  if ("ResizeObserver" in window) {
     new ResizeObserver(() => drawChart()).observe(canvas);
   }
   window.addEventListener("resize", () => drawChart());
+
+  // drag = scroll through history
+  canvas.addEventListener("mousedown", (e) => {
+    CHART_DRAG = { x: e.clientX, offset: CHART_VIEW.offset };
+    canvas.style.cursor = "grabbing";
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!CHART_DRAG || !CHART_DATA || !CHART_DATA.p.length) return;
+    const total = CHART_DATA.p.length;
+    const visible = Math.max(40, Math.floor(total / CHART_VIEW.zoom));
+    const barsPerPx = visible / Math.max(1, canvas.clientWidth);
+    CHART_VIEW.offset = CHART_DRAG.offset +
+      Math.round((e.clientX - CHART_DRAG.x) * barsPerPx);
+    chartClampView();
+    drawChart();
+  });
+  window.addEventListener("mouseup", () => {
+    CHART_DRAG = null;
+    if (canvas) canvas.style.cursor = "grab";
+  });
+
+  // wheel = zoom
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    CHART_VIEW.zoom *= (e.deltaY < 0 ? 1.25 : 0.8);
+    chartClampView();
+    drawChart();
+  }, { passive: false });
+
+  // double-click or LIVE button = back to live
+  const goLive = () => { CHART_VIEW = { zoom: 1, offset: 0 }; drawChart(); };
+  canvas.addEventListener("dblclick", goLive);
+  const liveBtn = $("chart-live");
+  if (liveBtn) liveBtn.onclick = goLive;
+
+  canvas.style.cursor = "grab";
   fetchChart();
   setInterval(fetchChart, 1500);
+}
+
+// --------------------------------------------------------------------- //
+function showToast(msg, isError = false) {
+  const el = $("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle("error", isError);
+  el.classList.remove("hidden");
+  clearTimeout(el._h);
+  el._h = setTimeout(() => el.classList.add("hidden"), 2400);
+}
+
+async function cmd(path, label) {
+  const r = await api(path, "POST");
+  if (r.ok) showToast("✓ " + label + ": " + t("cmd_sent"));
+  else showToast("✗ " + label + ": " + t("cmd_err") + " " +
+                 JSON.stringify(r.data || ""), true);
+  return r;
 }
 
 // --------------------------------------------------------------------- //
@@ -678,13 +798,13 @@ async function saveLLM() {
 
 // --------------------------------------------------------------------- //
 function bindControls() {
-  $("btn-start").onclick = () => api("/api/engine/start", "POST");
-  $("btn-pause").onclick = () => api("/api/engine/pause", "POST");
-  $("btn-stop").onclick = () => api("/api/engine/stop", "POST");
+  $("btn-start").onclick = () => cmd("/api/engine/start", t("btn_start"));
+  $("btn-pause").onclick = () => cmd("/api/engine/pause", t("btn_pause"));
+  $("btn-stop").onclick = () => cmd("/api/engine/stop", t("btn_stop"));
 
   // ONE-CLICK close: no confirmation dialogs
-  $("btn-close-pos").onclick = () => api("/api/position/close", "POST");
-  $("btn-close-all").onclick = () => api("/api/position/close-all", "POST");
+  $("btn-close-pos").onclick = () => cmd("/api/position/close", t("btn_close_pos"));
+  $("btn-close-all").onclick = () => cmd("/api/position/close-all", t("btn_close_all"));
 
   $("btn-mode").onclick = () => {
     const mode = (LAST_STATUS && LAST_STATUS.settings.mode) || "DEMO";
@@ -742,9 +862,9 @@ function bindControls() {
     $("update-banner").classList.add("hidden");
   };
 
-  document.querySelectorAll(".bottom-nav button").forEach(btn => {
+  document.querySelectorAll(".top-nav button").forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".top-nav button").forEach(b => b.classList.remove("active"));
       document.querySelectorAll(".tab").forEach(tb => tb.classList.remove("active"));
       btn.classList.add("active");
       $("tab-" + btn.dataset.tab).classList.add("active");
@@ -782,8 +902,5 @@ async function init() {
   pollQuick();
   setInterval(pollQuick, 100);   // fastest practical UI refresh
   setupChart();
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-  }
 }
 init();

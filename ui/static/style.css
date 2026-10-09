@@ -31,7 +31,6 @@ body {
     var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
-  padding-bottom: 96px;
 }
 
 /* ---------------- top bar ---------------- */
@@ -99,7 +98,7 @@ main { padding: 20px 22px; max-width: 1600px; margin: 0 auto; }
 
 /* ---------- dashboard: app-like fixed layout, no page scroll ---------- */
 #tab-dashboard.active {
-  height: calc(100vh - 186px);   /* topbar + margins + floating nav */
+  height: calc(100vh - 158px);   /* topbar (+tabs) + margins */
   min-height: 560px;
 }
 .dash-grid {
@@ -374,28 +373,75 @@ label.checkbox span { margin: 0; }
 .modal-box input { margin: 14px 0 16px; }
 .modal-box .btn-grid { justify-content: flex-end; }
 
-/* ---------------- bottom nav (segmented, Apple style) ---------------- */
-.bottom-nav {
-  position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: 18px; z-index: 60;
-  display: flex; gap: 4px; padding: 5px;
-  background: rgba(30, 30, 34, 0.72);
+/* ---------------- bottom space (floating nav removed in v2.2) --------- */
+body { padding-bottom: 24px; }
+
+/* ---------------- segmented tabs in the top bar ----------------------- */
+.top-nav {
+  display: flex; gap: 4px; padding: 4px;
+  background: rgba(255, 255, 255, 0.07);
   border: 1px solid var(--stroke); border-radius: 999px;
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
 }
-.bottom-nav button {
-  font-family: inherit; font-size: 14px; font-weight: 600;
+.top-nav button {
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
   color: var(--muted); background: transparent; border: none;
-  padding: 9px 26px; border-radius: 999px; cursor: pointer;
+  padding: 7px 22px; border-radius: 999px; cursor: pointer;
   transition: all .18s ease;
 }
-.bottom-nav button:hover { color: var(--text); }
-.bottom-nav button.active {
+.top-nav button:hover { color: var(--text); }
+.top-nav button.active {
   color: #fff; background: var(--blue);
-  box-shadow: 0 4px 14px rgba(10, 132, 255, 0.4);
+  box-shadow: 0 3px 12px rgba(10, 132, 255, 0.4);
 }
+
+/* ---------------- toast (click feedback) ------------------------------ */
+.toast {
+  position: fixed; top: 84px; left: 50%; transform: translateX(-50%);
+  z-index: 200; padding: 10px 20px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600;
+  background: rgba(48, 209, 88, 0.16);
+  border: 1px solid rgba(48, 209, 88, 0.4); color: var(--green);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  animation: fade .2s ease;
+}
+.toast.error {
+  background: rgba(255, 69, 58, 0.16);
+  border-color: rgba(255, 69, 58, 0.4); color: var(--red);
+}
+
+/* ---------------- chart LIVE control + hint --------------------------- */
+.chart-tools { display: flex; align-items: center; gap: 10px; }
+.chart-live {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(48, 209, 88, 0.45);
+  background: rgba(48, 209, 88, 0.14); color: var(--green);
+  transition: all .15s ease;
+}
+.chart-live:hover { filter: brightness(1.15); }
+.chart-live .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); animation: pulse 1.2s ease infinite;
+}
+.chart-live.paused {
+  border-color: rgba(255, 214, 10, 0.45);
+  background: rgba(255, 214, 10, 0.12); color: var(--amber);
+}
+.chart-live.paused .dot { background: var(--amber); animation: none; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(48, 209, 88, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0); }
+}
+.chart-hint {
+  margin-top: 8px; font-size: 11.5px; color: var(--muted); text-align: center;
+}
+
+/* disabled buttons reflect the engine state */
+.btn:disabled { opacity: 0.38; cursor: default; filter: none; }
+.btn:disabled:active { transform: none; }
 
 @media (max-width: 640px) {
   main { padding: 14px; }

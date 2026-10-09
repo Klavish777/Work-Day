@@ -176,6 +176,26 @@ def main() -> None:
                     win.maximize()
                 except Exception:  # noqa: BLE001
                     pass
+                # bring the window to the FRONT so it is never hidden
+                # behind the MT5 terminal or other windows
+                if sys.platform.startswith("win"):
+                    title = f"{APP_NAME} — prototip v{APP_VERSION}"
+
+                    def _to_front(delay: float) -> None:
+                        time.sleep(delay)
+                        try:
+                            import ctypes
+                            u32 = ctypes.windll.user32
+                            hwnd = u32.FindWindowW(None, title)
+                            if hwnd:
+                                u32.ShowWindow(hwnd, 3)   # SW_MAXIMIZE
+                                u32.SetForegroundWindow(hwnd)
+                        except Exception:  # noqa: BLE001
+                            pass
+
+                    for d in (0.4, 1.4):
+                        threading.Thread(target=_to_front, args=(d,),
+                                         daemon=True).start()
 
             webview.start(_on_started)  # blocks until the window is closed
             opened = True
