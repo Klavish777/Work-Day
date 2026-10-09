@@ -14,9 +14,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from core.paths import STATIC_DIR
 from core.settings import REAL_CONFIRMATION_PHRASE
-
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+from core.version import APP_NAME, APP_VERSION
 
 
 class SettingsPatch(BaseModel):
@@ -31,8 +31,9 @@ class MT5ConnectBody(BaseModel):
     server: str = ""
 
 
-def create_app(engine, settings_mgr, journal, gateway) -> FastAPI:
-    app = FastAPI(title="Work-Day AI Trader", version="1.0.0")
+def create_app(engine, settings_mgr, journal, gateway,
+               update_state=None) -> FastAPI:
+    app = FastAPI(title="Work-Day AI Trader", version=APP_VERSION)
 
     # ------------------------------------------------------------------ #
     @app.get("/api/status")
@@ -63,7 +64,17 @@ def create_app(engine, settings_mgr, journal, gateway) -> FastAPI:
             "settings": masked,
             "llm_provider": engine.provider.name,
             "real_phrase": REAL_CONFIRMATION_PHRASE,
+            "app_name": APP_NAME,
+            "version": APP_VERSION,
+            "update": dict(update_state) if update_state is not None else
+                      {"checked": False, "has_update": False},
         }
+
+    @app.get("/api/version")
+    def version():
+        return {"app_name": APP_NAME, "version": APP_VERSION,
+                "update": dict(update_state) if update_state is not None
+                else None}
 
     # ------------------------------------------------------------------ #
     @app.post("/api/engine/start")

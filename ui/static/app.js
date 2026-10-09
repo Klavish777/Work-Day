@@ -44,8 +44,23 @@ function fmtTs(ts) {
 }
 
 // --------------------------------------------------------------------- //
+function renderUpdateBanner(s) {
+  const u = s.update || {};
+  const banner = $("update-banner");
+  if (u.has_update && u.latest && !sessionStorage.getItem("update-hidden")) {
+    $("update-text").textContent =
+      `Доступно обновление: ${s.app_name || "Work-Day"} ${u.latest} ` +
+      `(у вас prototip v${s.version})`;
+    $("update-link").href = u.url || "https://github.com/Klavish777/Work-Day/releases";
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
 function renderStatus(s) {
   LAST_STATUS = s;
+  renderUpdateBanner(s);
   // badges
   const mt5 = s.mt5 || {};
   const mt5Badge = $("badge-mt5");
@@ -298,6 +313,10 @@ function bindControls() {
   $("btn-set-real").onclick = openRealModal;
   $("btn-real-cancel").onclick = () => $("modal-real").classList.add("hidden");
   $("btn-real-ok").onclick = confirmReal;
+  $("update-hide").onclick = () => {
+    sessionStorage.setItem("update-hidden", "1");
+    $("update-banner").classList.add("hidden");
+  };
 
   document.querySelectorAll(".bottom-nav button").forEach(btn => {
     btn.onclick = () => {

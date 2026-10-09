@@ -9,6 +9,9 @@ data/
 logs/*.log
 config/settings.json
 
+# Built executables
+*.exe
+
 # Android build output
 android/.gradle/
 android/build/

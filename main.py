@@ -51,10 +51,14 @@ def main() -> None:
     gateway = MT5Gateway()
     provider = build_provider(settings_mgr.get()["llm"])
 
+    from core.updater import UPDATE_STATE, start_update_check
+    start_update_check()
+
     engine = TradingEngine(settings_mgr, gateway, journal, provider)
     engine.start()
 
-    app = create_app(engine, settings_mgr, journal, gateway)
+    app = create_app(engine, settings_mgr, journal, gateway,
+                     update_state=UPDATE_STATE)
 
     ui_cfg = settings_mgr.get()["ui"]
     host = args.host or ui_cfg.get("host", "0.0.0.0")

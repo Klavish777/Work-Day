@@ -1,0 +1,94 @@
+name: Build Windows App (prototip)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "core/**"
+      - "ui/**"
+      - "desktop/**"
+      - "agents/**"
+      - "execution/**"
+      - "risk/**"
+      - "mt5/**"
+      - "llm/**"
+      - "database/**"
+      - "journal/**"
+      - "main.py"
+      - ".github/workflows/windows-app.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi "uvicorn[standard]" requests pywebview pillow MetaTrader5
+
+      - name: Read version
+        id: ver
+        shell: bash
+        run: |
+          V=$(python -c "exec(open('core/version.py').read()); print(APP_VERSION)")
+          echo "ver=$V" >> "$GITHUB_OUTPUT"
+          echo "Building prototip v$V"
+
+      - name: Make icon
+        run: |
+          python -c "from PIL import Image; im=Image.open('ui/static/icons/icon-512.png'); im.save('app.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])"
+
+      - name: Build EXE (PyInstaller)
+        run: >
+          pyinstaller --noconfirm --onefile --noconsole
+          --name "WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}"
+          --icon app.ico
+          --add-data "ui/static;ui/static"
+          --collect-submodules uvicorn
+          --collect-all webview
+          --hidden-import MetaTrader5
+          desktop/launcher.py
+
+      - name: Smoke test (run the real EXE)
+        run: |
+          & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --version
+          & ".\dist\WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" --selftest --port 8099
+          if ($LASTEXITCODE -ne 0) { throw "selftest failed" }
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}
+          path: dist/WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe
+
+      - name: Publish EXE to prototip branch (direct file delivery)
+        shell: bash
+        run: |
+          set -e
+          mkdir /tmp/protobranch && cd /tmp/protobranch
+          git init -q -b prototip
+          git config user.name "workday-ci"
+          git config user.email "workday-ci@users.noreply.github.com"
+          cp "$GITHUB_WORKSPACE/dist/WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe" WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe
+          printf 'Work-Day AI Trader - Windows application (prototip)\nVersion: %s\nCommit: %s\nRun: %s\n' "${{ steps.ver.outputs.ver }}" "${{ github.sha }}" "${{ github.run_id }}" > BUILD_INFO.txt
+          git add .
+          git commit -q -m "prototip v${{ steps.ver.outputs.ver }}"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git push -q -f origin prototip
+
+      - name: Publish release prototip-vX.Y
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: prototip-v${{ steps.ver.outputs.ver }}
+          name: Work-Day AI Trader — prototip v${{ steps.ver.outputs.ver }}
+          files: dist/WorkDayTrader-prototip-v${{ steps.ver.outputs.ver }}.exe
+          make_latest: "true"
