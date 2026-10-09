@@ -32,7 +32,8 @@ const I18N = {
     mt5_connection: "ПОДКЛЮЧЕНИЕ MT5 — BYBIT TRADFI / METAQUOTES",
     server_label: "Сервер",
     terminal_path: "Путь к терминалу (необязательно)",
-    mt5_login: "Логин MT5 (ID счёта)", mt5_password: "Пароль MT5",
+    mt5_login: "Логин MT5 (ID счёта)", mt5_password: "Пароль MT5 (запоминается)",
+    pwd_saved: "•••••• сохранён — оставьте пустым, чтобы использовать",
     server_input: "Сервер",
     btn_connect: "ПОДКЛЮЧИТЬ MT5", btn_disconnect: "ОТКЛЮЧИТЬ",
     trading_params: "ТОРГОВЫЕ ПАРАМЕТРЫ (только вручную — AI не меняет)",
@@ -69,7 +70,7 @@ const I18N = {
     connecting: "Подключение…", queued: "Запрос на подключение поставлен в очередь.",
     agent_market: "Market Analyst", agent_strategy: "Strategy Trader",
     agent_risk: "Risk Analyst", agent_central: "Central LLM",
-    howto: "<b>Как подключиться:</b><br>1. Установите терминал MetaTrader 5 на этот компьютер.<br>2. Получите данные счёта:<br>&nbsp;&nbsp;• <b>Bybit TradFi</b>: в приложении Bybit → TradFi → MT5-аккаунт → скопируйте <b>MT5 ID</b> и <b>пароль</b>.<br>&nbsp;&nbsp;• <b>MetaQuotes-Demo</b>: в терминале MT5 → Файл → Открыть счёт → найдите «MetaQuotes» → создайте демо-счёт → используйте выданные <b>логин и пароль</b> (виртуальные $, идеально для теста).<br>3. Выберите сервер ниже: <b>*-Demo</b> = демо, <b>Bybit-Live…Live7</b> = реальные деньги."
+    howto: "<b>Как подключиться:</b><br>1. Установите терминал MetaTrader 5 на этот компьютер.<br>2. Получите данные счёта:<br>&nbsp;&nbsp;• <b>Bybit TradFi</b>: в приложении Bybit → TradFi → MT5-аккаунт → скопируйте <b>MT5 ID</b> и <b>пароль</b>.<br>&nbsp;&nbsp;• <b>MetaQuotes-Demo</b>: в терминале MT5 → Файл → Открыть счёт → найдите «MetaQuotes» → создайте демо-счёт → используйте выданные <b>логин и пароль</b> (виртуальные $, идеально для теста).<br>3. Выберите сервер ниже: <b>*-Demo</b> = демо, <b>Bybit-Live…Live7</b> = реальные деньги.<br>4. Логин и пароль <b>запоминаются на этом компьютере</b> — при следующем запуске вводить их не нужно."
   },
   en: {
     dl_update: "Download update",
@@ -92,7 +93,8 @@ const I18N = {
     mt5_connection: "MT5 CONNECTION — BYBIT TRADFI / METAQUOTES",
     server_label: "Server",
     terminal_path: "Terminal path (optional)",
-    mt5_login: "MT5 Login (account ID)", mt5_password: "MT5 Password",
+    mt5_login: "MT5 Login (account ID)", mt5_password: "MT5 Password (remembered)",
+    pwd_saved: "•••••• saved — leave empty to reuse",
     server_input: "Server",
     btn_connect: "CONNECT MT5", btn_disconnect: "DISCONNECT",
     trading_params: "TRADING PARAMETERS (manual only — AI never changes these)",
@@ -129,7 +131,7 @@ const I18N = {
     connecting: "Connecting…", queued: "Connection request queued.",
     agent_market: "Market Analyst", agent_strategy: "Strategy Trader",
     agent_risk: "Risk Analyst", agent_central: "Central LLM",
-    howto: "<b>How to connect:</b><br>1. Install the MetaTrader 5 terminal on this computer.<br>2. Get account credentials:<br>&nbsp;&nbsp;• <b>Bybit TradFi</b>: Bybit app → TradFi → MT5 account → copy <b>MT5 ID</b> and <b>password</b>.<br>&nbsp;&nbsp;• <b>MetaQuotes-Demo</b>: MT5 terminal → File → Open an Account → search “MetaQuotes” → create a demo account → use the issued <b>login and password</b>.<br>3. Pick a server below: <b>*-Demo</b> = demo, <b>Bybit-Live…Live7</b> = real money."
+    howto: "<b>How to connect:</b><br>1. Install the MetaTrader 5 terminal on this computer.<br>2. Get account credentials:<br>&nbsp;&nbsp;• <b>Bybit TradFi</b>: Bybit app → TradFi → MT5 account → copy <b>MT5 ID</b> and <b>password</b>.<br>&nbsp;&nbsp;• <b>MetaQuotes-Demo</b>: MT5 terminal → File → Open an Account → search “MetaQuotes” → create a demo account → use the issued <b>login and password</b>.<br>3. Pick a server below: <b>*-Demo</b> = demo, <b>Bybit-Live…Live7</b> = real money.<br>4. Login and password are <b>remembered on this computer</b> — you won't need to re-enter them next time."
   }
 };
 
@@ -402,6 +404,9 @@ function fillSettings(s) {
   $("cfg-terminal").value = m.terminal_path || "";
   $("cfg-login").value = m.login || "";
   $("cfg-server").value = m.server || "";
+  const pwd = $("cfg-password");
+  pwd.value = "";
+  pwd.placeholder = m.password_saved ? t("pwd_saved") : "";
   const sel = $("cfg-server-select");
   if (sel) {
     const known = [...sel.options].some(o => o.value === m.server);
@@ -494,15 +499,17 @@ function bindControls() {
 
   $("btn-mt5-connect").onclick = async () => {
     $("mt5-detail").textContent = t("connecting");
+    const pwd = $("cfg-password").value;
     const r = await api("/api/mt5/connect", "POST", {
       terminal_path: $("cfg-terminal").value.trim(),
       login: $("cfg-login").value.trim(),
-      password: $("cfg-password").value,
+      password: pwd,
       server: $("cfg-server").value.trim(),
     });
     $("mt5-detail").textContent = r.ok ? t("queued") :
       "Failed: " + JSON.stringify(r.data);
     $("cfg-password").value = "";
+    if (r.ok && pwd) $("cfg-password").placeholder = t("pwd_saved");
   };
   $("btn-mt5-disconnect").onclick = () => api("/api/mt5/disconnect", "POST");
 

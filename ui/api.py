@@ -42,8 +42,8 @@ def create_app(engine, settings_mgr, journal, gateway,
         snap = engine.state.snapshot()
         masked = dict(s)
         mt5cfg = dict(masked.get("mt5", {}))
-        if mt5cfg.get("password"):
-            mt5cfg["password"] = "******"
+        mt5cfg["password_saved"] = bool(mt5cfg.get("password"))
+        mt5cfg["password"] = ""
         masked["mt5"] = mt5cfg
         llm_cfg = dict(masked.get("llm", {}))
         if llm_cfg.get("api_key"):
@@ -106,12 +106,20 @@ def create_app(engine, settings_mgr, journal, gateway,
     # ------------------------------------------------------------------ #
     @app.post("/api/mt5/connect")
     def mt5_connect(body: MT5ConnectBody):
-        cfg = {"terminal_path": body.terminal_path, "login": body.login,
-               "password": body.password, "server": body.server}
-        if body.login or body.server or body.terminal_path:
-            ok, errors, _ = settings_mgr.update({"mt5": cfg})
-            if not ok:
-                raise HTTPException(400, "; ".join(errors))
+        # merge with saved credentials: empty fields reuse the remembered
+        # values; a non-empty password is remembered for next launches.
+        saved = dict(settings_mgr.get().get("mt5", {}))
+        if body.terminal_path:
+            saved["terminal_path"] = body.terminal_path
+        if body.login:
+            saved["login"] = body.login
+        if body.server:
+            saved["server"] = body.server
+        if body.password:
+            saved["password"] = body.password
+        ok, errors, _ = settings_mgr.update({"mt5": saved})
+        if not ok:
+            raise HTTPException(400, "; ".join(errors))
         engine.cmd_connect_mt5(settings_mgr.get()["mt5"])
         return {"ok": True, "queued": True}
 

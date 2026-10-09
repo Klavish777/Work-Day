@@ -91,8 +91,22 @@ def test_mt5_password_never_leaks(client):
     c.post("/api/settings", json={"settings": {
         "mt5": {"login": "123", "password": "secret", "server": "X-Demo"}}})
     d = c.get("/api/status").json()
-    assert d["settings"]["mt5"]["password"] == "******"
+    assert d["settings"]["mt5"]["password"] == ""
+    assert d["settings"]["mt5"]["password_saved"] is True
     assert "secret" not in c.get("/api/status").text
+
+
+def test_mt5_credentials_remembered(client):
+    c, engine = client
+    c.post("/api/mt5/connect", json={"login": "777", "password": "pw123",
+                                     "server": "MetaQuotes-Demo"})
+    st = c.get("/api/status").json()["settings"]["mt5"]
+    assert st["login"] == "777"
+    assert st["password_saved"] is True
+    # second connect with no password reuses the remembered one
+    c.post("/api/mt5/connect", json={})
+    assert engine.settings_mgr.get()["mt5"]["password"] == "pw123"
+    assert engine.settings_mgr.get()["mt5"]["login"] == "777"
 
 
 def test_demo_connect_auto_starts_engine(client):
