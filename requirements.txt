@@ -1,0 +1,11 @@
+# Базовые зависимости агента (Windows, Python 3.10–3.13)
+#
+# MetaTrader5 ставится только на Windows — на Linux этот пакет не существует.
+MetaTrader5>=5.0.45 ; sys_platform == "win32"
+
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+PyYAML>=6.0
+python-dotenv>=1.0
+requests>=2.31

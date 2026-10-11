@@ -1,0 +1,38 @@
+# --- секреты ---
+.env
+*.key
+
+# --- рантайм-данные агента ---
+logs/
+reports/
+state/*.json
+state/KILL_SWITCH
+state/headlines.txt
+state/heartbeat.txt
+state/demo/
+data/*.csv
+data/*.parquet
+models/*.joblib
+models/*.json
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- сборка .exe (PyInstaller) ---
+*.spec
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
