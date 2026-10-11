@@ -73,6 +73,12 @@ function Write-Log($text) {
     Add-Content -Path $consoleLog -Value $line -Encoding UTF8
 }
 
+$stopRequest = Join-Path $ProjectRoot "state\STOP_REQUEST"
+if (Test-Path $stopRequest) {
+    Write-Log "Найден запрос мягкой остановки (state\STOP_REQUEST) — снимаю его перед запуском."
+    Remove-Item $stopRequest -Force
+}
+
 Write-Log "Запуск агента в режиме '$Mode' (once=$($Once.IsPresent), dryRun=$($DryRun.IsPresent))"
 
 $attempt = 0

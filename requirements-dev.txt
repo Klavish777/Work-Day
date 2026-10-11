@@ -2,3 +2,6 @@
 
 pytest>=7.4
 pytest-cov>=4.1
+
+# сборка .exe для панели управления (только Windows)
+pyinstaller>=6.0 ; sys_platform == "win32"

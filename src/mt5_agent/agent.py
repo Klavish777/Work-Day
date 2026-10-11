@@ -184,9 +184,18 @@ class TradingAgent:
         """Подключиться, проверить безопасность и войти в цикл."""
         self._prepare_broker()
         self._safety_guard()
+        self.clear_stop_request()
         self.notifier.started(self.mode, self.account_desc)
         try:
             while not self._stop_requested:
+                if self.stop_requested():
+                    log.warning(
+                        "Получен запрос остановки (%s) — завершаю текущий цикл и выхожу. "
+                        "Открытые позиции остаются под защитой стоп-лоссов у брокера.",
+                        self.stop_request_path,
+                    )
+                    self.notifier.stopped("запрошена мягкая остановка (stop request)")
+                    break
                 report = self.run_once()
                 if report.halted:
                     self.notifier.halted(report.halt_reason)
@@ -200,6 +209,24 @@ class TradingAgent:
             self.notifier.stopped("Ctrl+C")
         finally:
             self.shutdown()
+
+    # -- мягкая остановка (используется панелью управления и планировщиком) ----------
+    @property
+    def stop_request_path(self) -> Path:
+        return self.root / "state" / "STOP_REQUEST"
+
+    def stop_requested(self) -> bool:
+        """Есть ли файл-запрос на мягкую остановку (state/STOP_REQUEST)."""
+        return self.stop_request_path.exists()
+
+    def clear_stop_request(self) -> None:
+        """Убрать старый запрос остановки, чтобы он не убил только что запущенный агент."""
+        try:
+            if self.stop_request_path.exists():
+                self.stop_request_path.unlink()
+                log.info("Снят старый запрос остановки (%s)", self.stop_request_path)
+        except OSError as exc:  # pragma: no cover
+            log.warning("Не удалось удалить %s: %s", self.stop_request_path, exc)
 
     def shutdown(self) -> None:
         self.state.save(self.state_path)
@@ -347,7 +374,7 @@ class TradingAgent:
             daily_ref = self.state.daily.start_equity or account.equity
             report.pnl_today_pct = (account.equity - daily_ref) / daily_ref * 100.0 if daily_ref else 0.0
             for symbol_cfg in cfg.trading.enabled_symbols:
-                if self.state.halted:
+                if self.state.halted or self.stop_requested():
                     break
                 try:
                     self._process_symbol(symbol_cfg, account, own_positions, foreign, report, now)

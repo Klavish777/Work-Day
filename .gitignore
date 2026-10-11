@@ -28,6 +28,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# --- сборка .exe (PyInstaller) ---
+*.spec
+
 # --- IDE / OS ---
 .vscode/
 .idea/

@@ -6,6 +6,8 @@
     python -m mt5_agent backtest       # прогнать бэктест и получить вердикт
     python -m mt5_agent run            # запустить торговый цикл (демо!)
     python -m mt5_agent status         # что происходит сейчас
+    python -m mt5_agent panel          # графическая панель управления
+    python -m mt5_agent stop           # мягкая остановка (позиции не закрываются)
     python -m mt5_agent kill           # аварийный стоп (создать KILL_SWITCH)
     python -m mt5_agent unkill         # снять аварийный стоп
 
@@ -471,6 +473,44 @@ def cmd_run(args) -> int:
 # status / kill / unkill
 # -----------------------------------------------------------------------------
 
+def cmd_stop(args) -> int:
+    """Мягкая остановка агента: доработает цикл и выйдет, позиции не закрываются."""
+    from .control import AgentController
+
+    cfg = load_config(args.config)
+    controller = AgentController(config=cfg)
+    path = controller.request_stop(args.reason or "остановка из консоли")
+    print(f"{YELLOW}Запрошена мягкая остановка.{RESET}")
+    print(f"Файл: {path}")
+    print("Агент завершит текущий цикл и выйдет. Открытые позиции остаются под защитой "
+          "стоп-лоссов у брокера.")
+    print(f"{DIM}Если нужно закрыть позиции немедленно — используй kill (аварийный стоп).{RESET}")
+    if not controller.snapshot().running:
+        print(f"{DIM}Процесс агента сейчас не запущен: запрос будет учтён при следующем старте "
+              f"(агент снимет его сам) — но проще просто не запускать агента.{RESET}")
+    return 0
+
+
+def cmd_panel(args) -> int:
+    """Запустить панель управления (графическое окно, встроенный tkinter)."""
+    script = load_config(args.config).root_dir / "tools" / "agent_gui.py"
+    if not script.exists():
+        print(f"{RED}Не найден {script}{RESET}")
+        return 2
+    try:
+        import tkinter  # noqa: F401  (проверяем наличие, не используем напрямую)
+    except ImportError:
+        print(f"{RED}В этой сборке Python нет tkinter, поэтому окно панели недоступно.{RESET}")
+        print("На Windows tkinter входит в официальный установщик Python — переустанови Python "
+              "с галочкой «tcl/tk and IDLE».")
+        return 2
+    import subprocess
+    import sys as _sys
+
+    print(f"{GREEN}Открываю панель управления…{RESET} {DIM}(закрытие окна завершает панель){RESET}")
+    return subprocess.call([_sys.executable, str(script)])
+
+
 def cmd_status(args) -> int:
     cfg = load_config(args.config)
     from .state import AgentState
@@ -492,6 +532,8 @@ def cmd_status(args) -> int:
 
     print(f"Kill switch: {'АКТИВЕН ⛔️' if cfg.path(cfg.safety.kill_switch_file).exists() else 'снят ✅'}")
     print(f"Остановка (halt): {'ДА: ' + state.halt_reason if state.halted else 'нет'}")
+    if (cfg.root_dir / "state" / "STOP_REQUEST").exists():
+        print(f"{YELLOW}Запрошена мягкая остановка{RESET} (state/STOP_REQUEST) — агент завершит цикл и выйдет")
 
     if dashboard:
         account = dashboard.get("account", {})
@@ -617,6 +659,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_status = sub.add_parser("status", help="показать текущее состояние агента")
     p_status.set_defaults(func=cmd_status)
+
+    p_panel = sub.add_parser("panel", help="открыть графическую панель управления (Windows, tkinter)")
+    p_panel.set_defaults(func=cmd_panel)
+
+    p_stop = sub.add_parser("stop", help="мягкая остановка: доработать цикл и выйти (позиции не закрываются)")
+    p_stop.add_argument("--reason", help="причина остановки")
+    p_stop.set_defaults(func=cmd_stop)
 
     p_kill = sub.add_parser("kill", help="аварийный стоп: создать KILL_SWITCH")
     p_kill.add_argument("--reason", help="причина остановки")

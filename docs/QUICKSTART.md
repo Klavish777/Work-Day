@@ -188,16 +188,60 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper
 # затем открой http://127.0.0.1:8787
 ```
 
-Аварийный стоп (закроет свои позиции и остановит агента):
+Остановка агента — два разных действия, не путай:
 
 ```powershell
+# 1) МЯГКО: доработает текущий цикл и выйдет. Позиции НЕ закрываются —
+#    они остаются под защитой стоп-лоссов у брокера.
+.\.venv\Scripts\python.exe -m mt5_agent stop --reason "плановое обслуживание"
+
+# 2) АВАРИЙНО: закроет ВСЕ свои позиции и встанет (для нештатной ситуации).
 .\.venv\Scripts\python.exe -m mt5_agent kill --reason "останавливаю вручную"
-# снять: ... unkill
+
+# снять аварийный стоп: ... unkill
 ```
+
+В панели управления это кнопки «Остановить мягко» и «Kill switch».
 
 ---
 
-## Шаг 10. Режим 24/7 на VPS (когда демо уже показало себя)
+## Шаг 10. Панель управления вместо консоли (по желанию)
+
+Если удобнее нажимать кнопки, чем писать команды:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1
+# или из CLI:      .\.venv\Scripts\python.exe -m mt5_agent panel
+# ярлык на раб. столе:  ...start_gui.ps1 -CreateShortcut
+```
+
+Откроется окно с вкладками:
+
+* **Обзор** — статус (работает/остановлен/kill switch), equity, результат дня,
+  просадка, реализовано сегодня, сигналы последнего цикла;
+* **Позиции** — что открыто, где стопы и тейки, плавающий результат, причины
+  блокировок входа;
+* **Журнал** — последние события (входы, закрытия, стопы, блокировки) и лог агента;
+* **Задачи** — кнопки `check`, `fetch`, `train`, `backtest` с выводом прямо в окне;
+* **Настройки** — текущие лимиты риска (только чтение) и кнопки «открыть config.yaml /
+  папку проекта / reports».
+
+Кнопки вверху: **Демо-торговля**, **Наблюдение**, **Проверить один цикл** (без ордеров),
+**Остановить мягко**, **Kill switch**, **Снять стоп**.
+
+Важные особенности:
+
+* панель запускает агента **отдельным процессом** — закрытие окна агента не
+  останавливает (и наоборот: агент продолжит работать, если панель закрыта);
+* **реальный счёт из панели недоступен** — только консоль и три подтверждения
+  (см. `docs/SAFETY.md`). Это осознанное ограничение, а не недоделка;
+* лимиты риска в панели не редактируются: меняешь `config.yaml` и перезапускаешь
+  агента. Так решение «увеличить риск» не принимается одним нажатием в просадке;
+* если нужен один `.exe` для двойного щелчка:
+  `powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1`
+  (важно: `.exe` — только оболочка, рядом всё равно нужны проект, `.env` и терминал).
+
+## Шаг 11. Режим 24/7 на VPS (когда демо уже показало себя)
 
 Запуск от имени администратора:
 
@@ -240,6 +284,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tasks.ps1 -Mode pape
 | Кракозябры в консоли | старая консоль Windows | используй **Windows Terminal** или PowerShell 7; либо перед запуском `chcp 65001` |
 | Скрипт `.ps1` не запускается | политика выполнения | всегда запускай с `powershell -ExecutionPolicy Bypass -File .\scripts\...` |
 | Агент «молчит», сделок нет | вне сессии по UTC или сработал лимит | `python -m mt5_agent status` покажет причину по каждому символу |
+| Панель не открывается: `No module named tkinter` | Python установлен без tcl/tk | переустанови Python с python.org, оставив галочку «tcl/tk and IDLE», и пересоздай `.venv` |
+| Панель: «Kill switch активен», запуск не идёт | в `state\KILL_SWITCH` лежит файл стопа | нажми в панели «Снять стоп» (или `python -m mt5_agent unkill`), предварительно поняв причину |
+| Панель: «нет модели для EURUSD» | не выполнен `train` | вкладка «Задачи» → `train` (нужны данные: сначала `fetch`) |
+| Хочу остановить, но не закрывать позиции | нужна мягкая остановка | кнопка «Остановить мягко» / `python -m mt5_agent stop` (не `kill`!) |
 
 ---
 
@@ -262,9 +310,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tasks.ps1 -Mode pape
 powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode shadow   # только наблюдение
 powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper    # демо-ордера
 
-# контроль и аварийный стоп
-.\.venv\Scripts\python.exe tools\dashboard.py                  # http://127.0.0.1:8787
-.\.venv\Scripts\python.exe -m mt5_agent kill --reason "стоп"   # закрыть свои позиции и встать
+# панель управления (кнопки вместо команд)
+powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1   # окно с кнопками
+powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1 -CreateShortcut
+.\.venv\Scripts\python.exe -m mt5_agent panel                      # то же из CLI
+
+# контроль и остановка
+.\.venv\Scripts\python.exe tools\dashboard.py                  # http://127.0.0.1:8787 (только чтение)
+.\.venv\Scripts\python.exe -m mt5_agent stop --reason "план"   # мягко: доработает цикл, позиции не тронет
+.\.venv\Scripts\python.exe -m mt5_agent kill --reason "стоп"   # аварийно: закрыть свои позиции и встать
 .\.venv\Scripts\python.exe -m mt5_agent unkill                 # снять стоп
 
 # без MT5 (проверка программы)
@@ -280,3 +334,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper  
 * `docs/RUNBOOK.md` — эксплуатация на VPS, инциденты, недельные сверки;
 * `docs/ARCHITECTURE.md` — как добавлять символы, признаки, модели;
 * `docs/NEWS.md` — новостной фильтр и подключение локальной LLM (Ollama).
+
+Ещё раз о главном: панель и дашборд делают **управление** удобнее, но не меняют
+природу торговли. Реальные деньги включаются только осознанно, из консоли, после
+демо-периода — и это ограничение стоит сохранить.
