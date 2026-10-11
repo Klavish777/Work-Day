@@ -199,11 +199,16 @@ def cmd_fetch(args) -> int:
             if symbol_cfg is None:
                 print(f"{RED}Символ {args.symbol} не описан в config.yaml{RESET}")
                 return 2
+            # --timeframe позволяет скачать «запасной» таймфрейм, не меняя конфиг
+            timeframe = (args.timeframe or symbol_cfg.timeframe).upper()
+            if args.timeframe and args.timeframe.upper() != symbol_cfg.timeframe:
+                print(f"{DIM}{symbol_cfg.name}: таймфрейм {timeframe} (в конфиге "
+                      f"{symbol_cfg.timeframe} — сигналы считаются по нему){RESET}")
             spec = broker.symbol_spec(symbol_cfg.name)
             specs[symbol_cfg.name] = spec
-            frame = broker.rates(symbol_cfg.name, symbol_cfg.timeframe, args.bars)
-            path = store.save_bars(symbol_cfg.name, symbol_cfg.timeframe, frame)
-            print(f"{symbol_cfg.name} {symbol_cfg.timeframe}: {len(frame)} баров → {path.name} "
+            frame = broker.rates(symbol_cfg.name, timeframe, args.bars)
+            path = store.save_bars(symbol_cfg.name, timeframe, frame)
+            print(f"{symbol_cfg.name} {timeframe}: {len(frame)} баров → {path.name} "
                   f"({frame.index[0]} .. {frame.index[-1]})")
         if args.save_specs:
             path = store.save_specs(specs)
