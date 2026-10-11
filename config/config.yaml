@@ -1,0 +1,169 @@
+# =============================================================================
+#  MT5 AI-Agent — основной конфиг
+#  СЕКРЕТЫ (логин/пароль) здесь НЕ хранятся. Только в .env — см. .env.example
+# =============================================================================
+
+agent:
+  mode: "paper"                 # paper | shadow | live  (см. docs/README о режимах)
+  timezone: "UTC"               # как интерпретировать время из MT5 (MT5 отдаёт UTC)
+  loop_interval_sec: 60         # период основного цикла
+  heartbeat_file: "state/heartbeat.txt"   # watchdog следит за этим файлом
+  heartbeat_stale_sec: 180      # если файл не обновлялся дольше — watchdog перезапустит агента
+
+
+# --- Подключение к терминалу -------------------------------------------------
+mt5:
+  # Путь к terminal64.exe. Если терминал уже запущен — можно оставить пустым.
+  terminal_path: ""
+  server: ""                    # например "MetaQuotes-Demo". Если пусто — берём из .env
+  login: 0                      # 0 = взять MT5_LOGIN из .env
+  password: ""                  # пусто = взять MT5_PASSWORD из .env
+  portable: false               # true = отдельная portable-установка (рекомендуется)
+  timeout_ms: 60000             # таймаут initialize()
+  reconnect_attempts: 5
+  reconnect_backoff_sec: 5
+
+
+# --- Какие инструменты торгуем ----------------------------------------------
+# ВАЖНО: у каждого символа свои digits/point/stops_level. Агент берёт их из
+# символа, а не из конфига — здесь только разрешённый список и параметры риска.
+trading:
+  symbols:
+    - name: "EURUSD"
+      enabled: true
+      timeframe: "M15"          # рабочий таймфрейм сигнала
+      history_bars: 5000        # сколько баров тянуть для фич
+      max_spread_points: 20     # не входим, если спред шире
+      atr_period: 14
+      sl_atr_mult: 1.5          # стоп-лосс = 1.5 * ATR
+      tp_atr_mult: 2.25         # тейк = 2.25 * ATR  (R:R = 1.5)
+      min_atr_points: 5         # слишком «мёртвый» рынок — пропуск
+      session_start_utc: "07:00"  # торговая сессия (UTC)
+      session_end_utc: "19:00"
+      news_blackout_min: 30     # блокировка N минут вокруг важных новостей
+      magic: 20260001           # уникальный magic на символ (идентификация своих сделок)
+
+    - name: "GBPUSD"
+      enabled: false            # выключено по умолчанию — включай осознанно
+      timeframe: "M15"
+      history_bars: 5000
+      max_spread_points: 25
+      atr_period: 14
+      sl_atr_mult: 1.5
+      tp_atr_mult: 2.25
+      min_atr_points: 5
+      session_start_utc: "07:00"
+      session_end_utc: "19:00"
+      news_blackout_min: 30
+      magic: 20260002
+
+
+# --- Риск-модуль (самое важное) ---------------------------------------------
+# Правило: риск считается от equity на момент входа, а не от баланса.
+risk:
+  risk_per_trade_pct: 0.5        # 0.5% equity на сделку (диапазон 0.25–1.0)
+  max_daily_loss_pct: 2.0        # стоп торговли на день
+  max_weekly_loss_pct: 5.0       # стоп торговли на неделю
+  max_drawdown_pct: 10.0         # общий стоп: от пика equity
+  max_open_positions: 2          # максимум одновременных позиций
+  max_positions_per_symbol: 1
+  max_daily_trades: 6            # защита от «переторговли»
+  min_balance_floor: 100.0       # ниже этого equity агент не торгует вообще
+  cooldown_after_loss_min: 30    # пауза по символу после убытка
+  max_leverage_used: 5.0         # суммарная маржа не более X-кратного equity
+  allow_hedging: false           # запрет одновременного лонга и шорта по символу
+  allow_martingale: false        # ЖЁСТКО false — сетки и усреднение запрещены
+  allow_grid: false              # ЖЁСТКО false
+  # --- на случай непредвиденного ---
+  unknown_position_action: "halt"   # что делать, если по счёту есть сделки без нашего magic
+
+
+# --- ML-сигнал ---------------------------------------------------------------
+signal:
+  model: "gradient_boosting"     # gradient_boosting | logistic
+  horizon_bars: 4                # прогноз на 4 бара вперёд (~1 час на M15)
+  min_probability: 0.58          # порог вероятности для входа (калибруй на бэктесте)
+  allow_short: true              # false = только лонги (безопаснее для новичка)
+  retrain_every_days: 7
+  train_test_split: 0.75
+  feature_lookbacks: [1, 2, 3, 4, 8, 16, 32]   # окна для фич
+  embargo_bars: 4                # зазор между train и test (защита от утечки)
+  walk_forward_folds: 4
+  model_path: "models/signal_model.joblib"
+  require_model_trained: true    # нет модели — нет торговли (важно!)
+
+
+# --- Сентимент / новости -----------------------------------------------------
+# LLM работает ТОЛЬКО как фильтр (запрещает входить в «красный» новостной фон)
+# и НИКОГДА не является источником сигнала и не «предсказывает цену».
+sentiment:
+  enabled: true
+  provider: "headlines"          # none | headlines (файл + HTTP) | http_json
+  url: ""                        # необязательный HTTP-источник заголовков (JSON)
+  api_key_env: "NEWS_API_KEY"    # имя ПЕРЕМЕННОЙ окружения, не сам ключ
+  cache_minutes: 30
+  fetch_timeout_sec: 10
+  # Офлайн-источник: по одной строке на заголовок в state/headlines.txt
+  headlines_file: "state/headlines.txt"
+  negative_block_threshold: 0.6  # если «негатив» выше — входы блокируются
+  positive_boost: 0.02           # лёгкий сдвиг порога при позитивном фоне
+  llm:
+    enabled: false               # true = дополнительно спросить локальную LLM
+    base_url: "http://localhost:11434/v1"   # Ollama. Модель НИКУДА не отправляет твои данные
+    model: "gpt-oss:20b"         # любая локальная модель с OpenAI-совместимым API
+    api_key_env: "LLM_API_KEY"   # для локального сервера можно оставить пустым
+    timeout_sec: 20
+    max_tokens: 300
+    temperature: 0.0
+
+
+# --- Исполнение ---------------------------------------------------------------
+execution:
+  order_comment: "mt5-agent"       # видно в терминале
+  deviation_points: 10             # допустимое проскальзывание
+  filling_fallback: ["IOC", "FOK", "RETURN"]  # порядок выбора режима исполнения
+  max_slippage_points: 15          # если реальное проскальзывание больше — алерт
+  retry_attempts: 3
+  retry_backoff_sec: 2
+  send_sl_tp_with_order: true      # SL/TP ставим в том же запросе (safer)
+  close_partial_enabled: false     # частичное закрытие выключено (упрощает учёт)
+  breakeven_at_r: 1.0              # при +1R переводим стоп в безубыток (0 = выключено)
+  trail_atr_mult: 0.0              # сопровождение стопом по ATR (0 = выключено)
+
+
+# --- Бэктест -----------------------------------------------------------------
+backtest:
+  days: 180                      # сколько истории брать для теста
+  initial_balance: 1000.0
+  spread_points: 12              # фиксированный спред модели (реальный будет шире)
+  commission_per_lot: 7.0        # USD за 1.0 лот round-turn
+  slippage_points: 2
+  leverage: 100                  # для оценки маржи (как у брокера)
+  risk_per_trade_pct: 0.5        # риск в бэктесте (не связан с live)
+  max_hold_bars: 48              # принудительное закрытие через N баров
+  # Защита от «подгонки под бэктест»: результаты ниже этих метрик — НЕ торгуем
+  min_trades: 60
+  min_profit_factor: 1.25
+  max_allowed_dd_pct: 15.0
+  min_win_rate_with_rr: 0.38
+
+
+# --- Уведомления (опционально) ------------------------------------------------
+notifications:
+  telegram:
+    enabled: false
+    bot_token_env: "TG_BOT_TOKEN"     # имя переменной окружения в .env
+    chat_id_env: "TG_CHAT_ID"
+  log_level: "INFO"
+  log_file: "logs/agent.log"
+  log_max_bytes: 5242880
+  log_backup_count: 5
+
+
+# --- Защита ---------------------------------------------------------------
+safety:
+  demo_only: true                 # true = агент ОТКАЗЫВАЕТСЯ работать на реальном счёте
+  require_confirmation_for_live: true   # нужен флаг --i-understand-live + отдельный .env
+  kill_switch_file: "state/KILL_SWITCH" # наличие файла — немедленный стоп
+  max_consecutive_errors: 10      # после стольких ошибок подряд — halt и алерт
+  verify_account_number: true     # сверять реальный login с ожидаемым

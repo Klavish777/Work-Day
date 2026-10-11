@@ -1,0 +1,13 @@
+# Пример файла заголовков для новостного фильтра.
+# Скопируй в state/headlines.txt и обновляй вручную (или скриптом из календаря).
+# Строки, начинающиеся с #, игнорируются. Одна строка = один заголовок.
+#
+# Правило: если сомневаешься — добавляй. Пропущенная сделка стоит 0,
+# плохая сделка стоит денег.
+#
+# --- Пример содержимого ---
+# FOMC rate decision at 19:00 UTC
+# US CPI print expected to surprise on the upside
+# ECB press conference: Lagarde speaks on policy path
+# Escalation in the region: new sanctions announced
+# Nonfarm payrolls report at 13:30 UTC

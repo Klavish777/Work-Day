@@ -1,0 +1,51 @@
+# ПРИМЕР. Не используй эти числа для реальных расчётов!
+#
+# Файл data/symbol_specs.yaml создаётся автоматически, когда ты подключаешься
+# к терминалу и выполняешь:
+#
+#     python -m mt5_agent fetch --save-specs
+#
+# Значения снимаются с твоего брокера, и именно от них зависит размер риска
+# (tick_value_loss) и минимально допустимые дистанции стопов (stops_level).
+# У разных брокеров они РАЗНЫЕ: у одного 1.0 USD за пункт на лот EURUSD,
+# у другого — 0.95, у третьего счёт вообще в EUR, и тогда всё считается иначе.
+#
+# Это лишь образец с типовыми значениями 5-значного брокера — для экспериментов
+# в песочнице. Для торговли сними реальные значения командой выше.
+
+comment: "ПРИМЕР. Замени на данные своего брокера командой `fetch --save-specs`."
+symbols:
+  EURUSD:
+    digits: 5
+    point: 1.0e-05
+    tick_size: 1.0e-05
+    tick_value_loss: 1.0
+    tick_value_profit: 1.0
+    contract_size: 100000.0
+    volume_min: 0.01
+    volume_max: 100.0
+    volume_step: 0.01
+    stops_level_points: 0
+    spread_points: 0.0
+  GBPUSD:
+    digits: 5
+    point: 1.0e-05
+    tick_size: 1.0e-05
+    tick_value_loss: 1.0
+    tick_value_profit: 1.0
+    contract_size: 100000.0
+    volume_min: 0.01
+    volume_max: 100.0
+    volume_step: 0.01
+    stops_level_points: 0
+  USDJPY:
+    digits: 3
+    point: 0.001
+    tick_size: 0.001
+    tick_value_loss: 0.68
+    tick_value_profit: 0.68
+    contract_size: 100000.0
+    volume_min: 0.01
+    volume_max: 100.0
+    volume_step: 0.01
+    stops_level_points: 0
