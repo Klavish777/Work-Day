@@ -21,8 +21,9 @@ ML-модель даёт сигнал, локальная LLM фильтрует
 > результатами каждого шага и таблицей типовых ошибок.
 >
 > **Нужно приложение для Windows (кнопки, мастер настройки, .exe)?**
-> Смотри [`docs/APP.md`](docs/APP.md): как скачать готовый `.exe` из Actions, как
-> собрать самому и что нажимать при первом запуске.
+> Смотри [`docs/APP.md`](docs/APP.md): готовый архив лежит в разделе **Releases**
+> (`agent-v*`, ~45 МБ, Python не нужен), там же — как собрать самому и что нажимать
+> при первом запуске.
 
 ## С чего начать (Windows)
 
@@ -149,7 +150,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper
 стоп — в одном окне. Работает на встроенном `tkinter`, внешних зависимостей нет.
 
 ```powershell
-# вариант 1: скачать готовый MT5-Agent.exe (Python не нужен) — см. docs/APP.md
+# вариант 1: скачать готовый архив из Releases (Python не нужен) — см. docs/APP.md
 # вариант 2: собрать на своём ПК
 powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1
 
