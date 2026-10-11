@@ -44,8 +44,8 @@ jobs:
       - name: Установить зависимости
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller
+          # requirements-dev.txt = рабочие зависимости + pytest + pyinstaller
+          pip install -r requirements-dev.txt
 
       - name: Прогнать тесты (сборка ломается при красных тестах)
         # Вывод пишется в файл (артефакт pytest-log.txt), а причина падения —
