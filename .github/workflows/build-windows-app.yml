@@ -48,7 +48,20 @@ jobs:
           pip install pyinstaller
 
       - name: Прогнать тесты (сборка ломается при красных тестах)
-        run: pytest -q
+        # Вывод пишется в файл: он же попадёт в артефакт pytest-log.txt,
+        # чтобы причину падения было видно без чтения логов сборки.
+        shell: pwsh
+        run: |
+          python -m pytest -q --tb=long --color=no 2>&1 | Tee-Object -FilePath pytest-log.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Сохранить вывод тестов (даже если тесты упали)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log
+          path: pytest-log.txt
+          if-no-files-found: ignore
 
       - name: Собрать приложение (.exe)
         run: |
