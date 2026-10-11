@@ -48,12 +48,23 @@ jobs:
           pip install pyinstaller
 
       - name: Прогнать тесты (сборка ломается при красных тестах)
-        # Вывод пишется в файл: он же попадёт в артефакт pytest-log.txt,
-        # чтобы причину падения было видно без чтения логов сборки.
+        # Вывод пишется в файл (артефакт pytest-log.txt), а причина падения —
+        # ещё и в аннотацию, чтобы её было видно без чтения логов сборки.
         shell: pwsh
         run: |
-          python -m pytest -q --tb=long --color=no 2>&1 | Tee-Object -FilePath pytest-log.txt
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pytest -q --tb=line --color=no 2>&1 | Tee-Object -FilePath pytest-log.txt
+          $code = $LASTEXITCODE
+          Get-Content pytest-log.txt -Tail 15
+          if ($code -ne 0) {
+            $why = (Get-Content pytest-log.txt | Select-String -Pattern '^(FAILED|ERROR)' |
+                    Select-Object -First 20 | ForEach-Object { $_.Line.Trim() }) -join ' | '
+            if (-not $why) {
+              $why = (Get-Content pytest-log.txt | Select-String -Pattern '\.py:\d+:' |
+                      Select-Object -First 20 | ForEach-Object { $_.Line.Trim() }) -join ' | '
+            }
+            Write-Host "::error title=Тесты упали::$(if ($why) { $why } else { 'см. артефакт pytest-log.txt' })"
+            exit $code
+          }
 
       - name: Сохранить вывод тестов (даже если тесты упали)
         if: always()
