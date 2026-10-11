@@ -3,10 +3,16 @@
 #
 #  Зачем этот файл: собрать .exe можно только НА Windows (PyInstaller не умеет
 #  кросс-сборку), поэтому сборка выполняется на раннере GitHub Actions, а готовый
-#  файл выкладывается как артефакт (и как релиз — при пуше тега v*).
+#  файл выкладывается как артефакт (и как релиз — при пуше тега agent-v*).
 #
-#  Как получить приложение: вкладка Actions → «Сборка приложения (Windows)» →
-#  Run workflow → скачать артефакт MT5-Agent-Windows.
+#  Как получить приложение:
+#    * вручную: вкладка Actions → «Сборка приложения (Windows)» → Run workflow
+#      (кнопка появляется, когда файл попадает в основную ветку main);
+#    * тегом: git tag agent-v0.1.0 && git push origin agent-v0.1.0 — соберётся и
+#      выложится релиз с архивом MT5-Agent-Windows.zip.
+#
+#  Префикс тега именно agent-v*, чтобы не пересекаться с тегами других сборок
+#  этого репозитория (prototip-*, v*-apk).
 # =============================================================================
 
 name: Сборка приложения (Windows)
@@ -15,7 +21,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - "v*"
+      - "agent-v*"
 
 permissions:
   contents: write
@@ -111,8 +117,8 @@ jobs:
           path: dist/MT5-Agent-Windows.zip
           if-no-files-found: error
 
-      - name: Выложить релиз (только для тегов v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Выложить релиз (только для тегов agent-v*)
+        if: startsWith(github.ref, 'refs/tags/agent-v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MT5-Agent-Windows.zip
