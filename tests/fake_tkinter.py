@@ -81,7 +81,11 @@ def install(monkeypatch) -> ModuleType:
     tk.END = "end"
 
     ttk = _module("tkinter.ttk")
-    for name in ("Style", "Frame", "Label", "Button", "Notebook", "Treeview", "Entry", "Labelframe", "Separator"):
+    for name in (
+        "Style", "Frame", "Label", "Button", "Notebook", "Treeview", "Entry",
+        "Labelframe", "LabelFrame", "Separator", "Combobox", "Checkbutton",
+        "Radiobutton", "Scrollbar", "Progressbar",
+    ):
         setattr(ttk, name, _Widget)
 
     messagebox = _module("tkinter.messagebox")

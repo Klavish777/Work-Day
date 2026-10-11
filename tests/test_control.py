@@ -310,3 +310,136 @@ def test_stop_request_short_circuits_symbol_loop(config, project: Path, fake_bro
     report = agent.run_once()
     assert fake_broker.orders_sent == [], "при запросе остановки новые ордера не отправляются"
     assert report.signals == []
+
+# --- .env и мастер настройки -----------------------------------------------------
+
+def test_save_env_creates_file_with_keys(controller: AgentController) -> None:
+    path = controller.save_env({
+        "MT5_LOGIN": "12345678",
+        "MT5_PASSWORD": "demo-secret",
+        "MT5_SERVER": "MetaQuotes-Demo",
+    })
+    text = path.read_text(encoding="utf-8")
+    assert "MT5_LOGIN=12345678" in text
+    assert "MT5_PASSWORD=demo-secret" in text
+    values = controller.env_values()
+    assert values["MT5_SERVER"] == "MetaQuotes-Demo"
+
+
+def test_save_env_preserves_comments_and_other_keys(controller: AgentController, project: Path) -> None:
+    (project / ".env").write_text(
+        "# мои заметки\n"
+        "MT5_LOGIN=old_login\n"
+        "TG_BOT_TOKEN=не-трогать\n"
+        "# комментарий в конце\n",
+        encoding="utf-8",
+    )
+    controller.save_env({"MT5_LOGIN": "new_login", "MT5_SERVER": "Broker-Demo"})
+    text = (project / ".env").read_text(encoding="utf-8")
+    assert "MT5_LOGIN=new_login" in text
+    assert "old_login" not in text
+    assert "TG_BOT_TOKEN=не-трогать" in text
+    assert "# мои заметки" in text
+    assert "# комментарий в конце" in text
+    assert "MT5_SERVER=Broker-Demo" in text       # новый ключ дописан
+
+
+def test_save_env_does_not_touch_real_credentials(controller: AgentController, project: Path) -> None:
+    (project / ".env").write_text("MT5_REAL_LOGIN=999\nMT5_REAL_PASSWORD=real\n", encoding="utf-8")
+    controller.save_env({"MT5_LOGIN": "111"})
+    text = (project / ".env").read_text(encoding="utf-8")
+    assert "MT5_REAL_LOGIN=999" in text and "MT5_REAL_PASSWORD=real" in text
+
+
+def test_env_values_handles_quotes_and_missing_file(controller: AgentController, project: Path) -> None:
+    assert controller.env_values() == {}
+    (project / ".env").write_text('MT5_SERVER="MetaQuotes-Demo"\nMT5_LOGIN=\'123\'\n', encoding="utf-8")
+    values = controller.env_values()
+    assert values["MT5_SERVER"] == "MetaQuotes-Demo"
+    assert values["MT5_LOGIN"] == "123"
+
+
+# --- символы и сценарий «быстрого старта» ----------------------------------------
+
+def test_symbol_names_lists_enabled_first(controller: AgentController) -> None:
+    names = controller.symbol_names()
+    assert names[0] == "EURUSD"                      # включённый идёт первым
+    assert "AUDCAD (выключен)" in names              # выключенные помечены
+
+
+def test_symbol_details_for_audcad(controller: AgentController) -> None:
+    text = controller.symbol_details("AUDCAD")
+    assert "AUDCAD" in text
+    assert "00:00–06:00, 13:00–19:00" in text    # два окна ликвидности
+    assert "макс. спред 30" in text
+
+
+def test_pipeline_steps_with_broker(controller: AgentController) -> None:
+    steps = controller.pipeline_steps("AUDCAD", bars=5000, days=120)
+    keys = [step["key"] for step in steps]
+    assert keys == ["check", "fetch", "train", "backtest"]
+    fetch = steps[1]
+    assert fetch["args"] == ["fetch", "--symbol", "AUDCAD", "--bars", "5000", "--save-specs"]
+    assert "--days" in steps[3]["args"] and "120" in steps[3]["args"]
+    assert steps[1]["stop_on_nonzero"] is True    # без данных обучение бессмысленно
+
+
+def test_pipeline_steps_synthetic_skips_fetch(controller: AgentController) -> None:
+    steps = controller.pipeline_steps("AUDCAD", synthetic=True)
+    keys = [step["key"] for step in steps]
+    assert "fetch" not in keys
+    assert "--synthetic" in steps[-1]["args"]
+    # нумерация после пропуска без «дыр»
+    assert [step["label"].split(".")[0] for step in steps] == ["1", "2", "3"]
+
+
+def test_control_module_has_no_gui_imports(controller: AgentController) -> None:
+    """Контроллер обязан работать без графики — иначе панель нельзя тестировать."""
+    import mt5_agent.control as control_module
+
+    source = Path(control_module.__file__).read_text(encoding="utf-8")
+    assert "tkinter" not in source
+
+
+# --- работа из собранного .exe (PyInstaller) ---------------------------------------
+
+def test_frozen_app_uses_cli_flag(controller: AgentController, monkeypatch) -> None:
+    """Внутри .exe sys.executable — сам exe, поэтому нужен явный --cli."""
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, "frozen", True, raising=False)
+    assert controller.is_frozen is True
+    command = controller.agent_command(["run", "--mode", "paper"])
+    assert command[0] == str(controller.python_exe)
+    assert command[1] == "--cli"
+    assert command[2:] == ["run", "--mode", "paper"]
+
+
+def test_source_run_uses_module_flag(controller: AgentController, monkeypatch) -> None:
+    import sys as _sys
+
+    monkeypatch.delattr(_sys, "frozen", raising=False)
+    assert controller.is_frozen is False
+    assert controller.agent_command(["check"])[1:] == ["-m", "mt5_agent", "check"]
+
+
+def test_frozen_start_passes_cli_and_mode(controller: AgentController, monkeypatch) -> None:
+    import sys as _sys
+
+    monkeypatch.setattr(_sys, "frozen", True, raising=False)
+    captured: dict = {}
+
+    class FakePopen:
+        pid = 777
+
+        def __init__(self, args, **kwargs):
+            captured["args"] = args
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr("mt5_agent.control.subprocess.Popen", FakePopen)
+    controller.start(mode="paper", dry_run=True, once=True)
+    assert captured["args"][1] == "--cli"
+    assert captured["args"][2:5] == ["run", "--mode", "paper"]
+    assert "--dry-run" in captured["args"] and "--once" in captured["args"]

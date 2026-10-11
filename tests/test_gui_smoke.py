@@ -171,3 +171,16 @@ def test_panel_never_starts_when_already_running(panel_module, monkeypatch) -> N
     panel.start_agent("paper")
     assert started == [], "повторный запуск агента из панели запрещён"
     panel.destroy()
+
+
+def test_exe_cli_mode_dispatches_to_cli(panel_module, monkeypatch) -> None:
+    """Собранный .exe с --cli должен выполнять консольную команду, а не открывать окно."""
+    agent_gui, _ = panel_module
+    calls: list[list[str]] = []
+
+    import mt5_agent.cli as cli_module
+
+    monkeypatch.setattr(cli_module, "main", lambda argv=None: calls.append(list(argv or [])) or 0)
+    code = agent_gui.main(["--cli", "check"])
+    assert code == 0
+    assert calls == [["check"]]

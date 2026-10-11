@@ -51,8 +51,10 @@ $arguments = @(
     "--noconfirm",
     "--clean",
     "--windowed",                                  # без окна консоли
-    "--name", "MT5-Agent-Панель",
+    "--name", "MT5-Agent",
     "--paths", (Join-Path $ProjectRoot "src"),     # чтобы нашёлся пакет mt5_agent
+    "--collect-submodules", "mt5_agent",           # внутрь .exe попадает весь агент
+    "--hidden-import", "MetaTrader5",              # без него .exe не сможет связаться с терминалом
     "--distpath", $distDir,
     "--workpath", $buildDir,
     "--specpath", $buildDir
@@ -73,19 +75,40 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$result = if ($OneFile) { Join-Path $distDir "MT5-Agent-Панель.exe" } else { Join-Path $distDir "MT5-Agent-Панель" }
-Write-Host "[OK] Готово: $result" -ForegroundColor Green
+$exeName = "MT5-Agent.exe"
+if ($OneFile) {
+    $result = Join-Path $distDir $exeName
+} else {
+    $result = Join-Path $distDir "MT5-Agent" $exeName
+}
+
+# Кладём .exe в корень проекта: тогда он найдёт config/.env/models рядом с собой
+$target = Join-Path $ProjectRoot $exeName
+if (Test-Path $result) {
+    Copy-Item $result $target -Force
+    Write-Host "[OK] Приложение собрано: $result" -ForegroundColor Green
+    Write-Host "[OK] Скопировано в корень проекта: $target" -ForegroundColor Green
+} else {
+    Write-Host "[!] Не найден ожидаемый файл $result — посмотри папку dist." -ForegroundColor Yellow
+}
+
 Write-Host @"
 
-Как пользоваться:
-  1. Запусти MT5, войди в ДЕМО-счёт, включи AutoTrading.
-  2. Запусти MT5-Agent-Панель.exe (двойным щелчком).
-  3. В панели: «Проверить один цикл» → «Демо-торговля».
+Как пользоваться (два способа):
+  A) Двойной щелчок по MT5-Agent.exe в корне проекта → открывается окно панели.
+     Дальше: вкладка «Настройка» → реквизиты демо-счёта → «Сохранить в .env»
+             вкладка «Быстрый старт» → «Запустить всё до бэктеста» → демо-торговля.
+  B) Консольный режим того же файла (полный набор команд):
+     .\MT5-Agent.exe --cli check
+     .\MT5-Agent.exe --cli fetch --symbol AUDCAD --bars 20000 --save-specs
+     .\MT5-Agent.exe --cli train --symbol AUDCAD
+     .\MT5-Agent.exe --cli backtest --symbol AUDCAD --days 180
+     .\MT5-Agent.exe --cli run --mode paper
 
 Важно:
-  * .exe читает config\.env\models из СВОЕЙ папки проекта. Если переносишь .exe
-    отдельно от проекта, он не найдёт настройки — держи его рядом с проектом
-    (или запускай из папки проекта).
-  * Если панель сообщает «нет модели» — сначала выполни train (вкладка «Задачи»).
-  * Реальный счёт через панель запустить нельзя: только консоль + три подтверждения.
+  * .exe НЕ самодостаточен: рядом должны лежать папка config\ (с config.yaml), файл .env
+    и папка models\ (там появятся обученные модели). Поэтому запускай его из корня проекта.
+  * Панель внутри .exe поддерживает только shadow/paper. Реальный счёт — только через
+    консольный режим (--cli run --mode live --i-understand-live) и три подтверждения.
+  * Если панель сообщает «нет модели» — сначала шаг train («Быстрый старт» или --cli train).
 "@ -ForegroundColor Gray

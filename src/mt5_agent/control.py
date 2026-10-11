@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .config import Config, load_config
+from .specs import fallback_spec
 from .logging_setup import get_logger
 from .state import AgentState
 from .utils import file_age_sec, read_json, utc_now
@@ -223,7 +224,7 @@ class AgentController:
             mark = "" if symbol.enabled else " (выключен)"
             rows.append((
                 f"{symbol.name}{mark}",
-                f"{symbol.timeframe}, сессия {symbol.session_start_utc}–{symbol.session_end_utc} UTC, "
+                f"{symbol.timeframe}, сессия {symbol.session_text()} UTC, "
                 f"SL {symbol.sl_atr_mult}×ATR, TP {symbol.tp_atr_mult}×ATR",
             ))
         return rows
@@ -275,6 +276,24 @@ class AgentController:
                 changed = True
         return changed
 
+    @property
+    def is_frozen(self) -> bool:
+        """Запущено ли собранное приложение (.exe, PyInstaller)."""
+        return bool(getattr(sys, "frozen", False))
+
+    def agent_command(self, args: Sequence[str]) -> list[str]:
+        """Команда запуска агента/задач в текущем окружении.
+
+        Из исходников: ``python -m mt5_agent run ...``
+
+        Из собранного .exe: ``MT5-Agent.exe --cli run ...`` — потому что
+        ``sys.executable`` внутри .exe указывает на сам .exe, и без явного режима
+        приложение открыло бы ещё одно окно панели вместо запуска агента.
+        """
+        if self.is_frozen:
+            return [str(self.python_exe), "--cli", *args]
+        return [str(self.python_exe), "-m", "mt5_agent", *args]
+
     def start(self, *, mode: str = "paper", dry_run: bool = False, once: bool = False) -> subprocess.Popen:
         """Запустить агента отдельным процессом (тот же CLI, что и вручную).
 
@@ -288,7 +307,7 @@ class AgentController:
         if self.cfg.agent.mode not in ("paper", "shadow", "live"):
             raise ValueError(f"Некорректный режим в конфиге: {self.cfg.agent.mode}")
         self.cancel_stop_request()
-        arguments = [str(self.python_exe), "-m", "mt5_agent", "run", "--mode", mode]
+        arguments = self.agent_command(["run", "--mode", mode])
         if dry_run:
             arguments.append("--dry-run")
         if once:
@@ -309,9 +328,153 @@ class AgentController:
         output = self.task_log_path.open("a", encoding="utf-8")
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
         return subprocess.Popen(
-            [str(self.python_exe), "-m", "mt5_agent", *args],
+            self.agent_command(list(args)),
             cwd=str(self.root), stdout=output, stderr=subprocess.STDOUT, env=env,
         )
+
+    # -- .env: чтение и запись (мастер настройки в приложении) ---------------------
+    @property
+    def env_path(self) -> Path:
+        return self.root / ".env"
+
+    def env_values(self) -> dict[str, str]:
+        """Текущие значения .env (только для предзаполнения полей мастера).
+
+        Пароль здесь читается, но нигде не логируется: приложение показывает его
+        в поле с маскировкой.
+        """
+        values: dict[str, str] = {}
+        if not self.env_path.exists():
+            return values
+        try:
+            for raw in self.env_path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                values[key.strip()] = value.strip().strip('"').strip("'")
+        except OSError:
+            return values
+        return values
+
+    def save_env(self, updates: dict[str, str]) -> Path:
+        """Обновить .env: сохранить комментарии и чужие ключи, дописать недостающие.
+
+        Мастер настройки пишет сюда реквизиты счёта — это тот же файл, который
+        человек заполнял бы руками, и он не попадает в git (.env в .gitignore).
+        """
+        cleaned = {
+            str(key).strip(): str(value).strip()
+            for key, value in updates.items()
+            if str(key).strip() and value is not None
+        }
+        lines: list[str] = []
+        if self.env_path.exists():
+            lines = self.env_path.read_text(encoding="utf-8").splitlines()
+
+        written: set[str] = set()
+        result: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                key = stripped.split("=", 1)[0].strip()
+                if key in cleaned:
+                    result.append(f"{key}={cleaned[key]}")
+                    written.add(key)
+                    continue
+            result.append(line)
+
+        remaining = {key: value for key, value in cleaned.items() if key not in written}
+        if remaining:
+            if result and result[-1].strip():
+                result.append("")
+            result.append("# --- заполнено мастером настройки приложения ---")
+            for key, value in remaining.items():
+                result.append(f"{key}={value}")
+
+        self.env_path.write_text("\n".join(result).rstrip("\n") + "\n", encoding="utf-8")
+        log.info("Обновлён .env (ключи: %s)", ", ".join(sorted(cleaned)))
+        return self.env_path
+
+    # -- символы и сценарий быстрого старта ------------------------------------------
+    def symbol_names(self) -> list[str]:
+        """Список символов для интерфейса: сначала включённые, потом выключенные."""
+        enabled = [s.name for s in self.cfg.trading.symbols if s.enabled]
+        disabled = [s.name for s in self.cfg.trading.symbols if not s.enabled]
+        return enabled + [f"{name} (выключен)" for name in disabled]
+
+    def default_symbol(self) -> str:
+        enabled = self.cfg.trading.enabled_symbols
+        return enabled[0].name if enabled else (self.cfg.trading.symbols[0].name
+                                                if self.cfg.trading.symbols else "AUDCAD")
+
+    def symbol_details(self, name: str) -> str:
+        """Одна строка про инструмент — для подсказки под полем выбора."""
+        symbol = self.cfg.trading.by_name(name)
+        if symbol is None:
+            return ""
+        spec = fallback_spec(symbol.name)
+        return (
+            f"{symbol.name}: {symbol.timeframe}, сессия {symbol.session_text()} UTC, "
+            f"макс. спред {symbol.max_spread_points} пт, SL {symbol.sl_atr_mult}×ATR / "
+            f"TP {symbol.tp_atr_mult}×ATR, {spec.digits} знаков"
+        )
+
+    def pipeline_steps(self, symbol: str, *, bars: int = 20000, days: int = 180,
+                       synthetic: bool = False) -> list[dict]:
+        """Последовательность «быстрого старта»: от проверки до демо-торговли.
+
+        Каждый шаг — обычная команда CLI. Шаги с ``stop_on_nonzero`` прерывают
+        последовательность: например, при отрицательном вердикте бэктеста демо
+        запускать нельзя, и приложение не будет предлагать это автоматически.
+        """
+        steps = [
+            {
+                "key": "check",
+                "label": "1. Проверка окружения и связи с MT5",
+                "args": ["check"],
+                "hint": "нужны заполненный .env и запущенный терминал с ДЕМО-счётом",
+                "stop_on_nonzero": False,   # check может пройти с замечаниями
+            },
+            {
+                "key": "fetch",
+                "label": f"2. Данные по {symbol} с брокера",
+                "args": ["fetch", "--symbol", symbol, "--bars", str(bars), "--save-specs"],
+                "hint": "важно: --save-specs сохраняет реальную стоимость пункта",
+                "synthetic_args": ["fetch", "--symbol", symbol, "--bars", str(bars)],
+                "stop_on_nonzero": True,
+            },
+            {
+                "key": "train",
+                "label": f"3. Обучение модели по {symbol}",
+                "args": ["train", "--symbol", symbol],
+                "synthetic_args": ["train", "--symbol", symbol, "--bars", str(bars), "--synthetic"],
+                "hint": "смотри AUC на отложенном тесте, а не на train",
+                "stop_on_nonzero": False,   # ненулевой код = «модель слабая», это важно увидеть
+            },
+            {
+                "key": "backtest",
+                "label": "4. Бэктест с издержками и вердиктом",
+                "args": ["backtest", "--symbol", symbol, "--days", str(days)],
+                "synthetic_args": ["backtest", "--symbol", symbol, "--bars", str(bars), "--synthetic"],
+                "hint": "код 1 = метрики ниже порогов, на демо в таком виде нельзя",
+                "stop_on_nonzero": False,
+            },
+        ]
+        if synthetic:
+            # В песочнице нет терминала, поэтому шаг «скачать с брокера» невыполним —
+            # его убираем, а остальные шаги переводим на синтетические данные.
+            steps = [step for step in steps if step["key"] != "fetch"]
+            for step in steps:
+                if "synthetic_args" in step:
+                    step["args"] = step["synthetic_args"]
+
+        for step in steps:
+            step.pop("synthetic_args", None)
+        # Нумеруем заново после возможных пропусков, чтобы в интерфейсе не было дыр
+        for index, step in enumerate(steps, start=1):
+            step["label"] = f"{index}. " + step["label"].split(". ", 1)[-1]
+        return steps
 
     # -- журналы ------------------------------------------------------------------------
     def tail_events(self, count: int = 60) -> list[dict]:

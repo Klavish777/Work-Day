@@ -24,8 +24,8 @@
 5. Заполни `.env` реквизитами демо-счёта.
 6. Проверь: `.\.venv\Scripts\python.exe -m mt5_agent check` — все пункты должны быть ✅.
 7. Скачай данные: `... fetch --bars 20000 --save-specs`
-8. Обучи модель: `... train --symbol EURUSD`
-9. Бэктест: `... backtest --symbol EURUSD --days 180` → смотри вердикт.
+8. Обучи модель: `... train --symbol AUDCAD`
+9. Бэктест: `... backtest --symbol AUDCAD --days 180` → смотри вердикт.
 10. Регистрация задач планировщика (запуск от администратора):
 
 ```powershell
@@ -92,8 +92,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tasks.ps1 -Mode pape
 
 ```powershell
 .\.venv\Scripts\python.exe -m mt5_agent fetch --bars 20000 --save-specs
-.\.venv\Scripts\python.exe -m mt5_agent train --symbol EURUSD
-.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol EURUSD --days 180
+.\.venv\Scripts\python.exe -m mt5_agent train --symbol AUDCAD
+.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol AUDCAD --days 180
 ```
 
 Сравни новый AUC на отложенном тесте с прошлым. Резкое падение (например, 0.55 → 0.50)
@@ -134,7 +134,7 @@ Get-Content .\logs\console.log -Tail 30
 
 ```powershell
 .\.venv\Scripts\python.exe -m mt5_agent fetch --save-specs
-.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol EURUSD --days 180
+.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol AUDCAD --days 180
 ```
 
 `--save-specs` обновляет `data/symbol_specs.yaml` — именно оттуда бэктест берёт

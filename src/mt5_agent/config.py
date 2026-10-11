@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -94,12 +95,30 @@ class SymbolConfig:
     min_atr_points: float = 5.0
     session_start_utc: str = "07:00"
     session_end_utc: str = "19:00"
+    # Если заданы окна — они важнее пары start/end. Нужно для инструментов с двумя
+    # пиками ликвидности (пример: AUDCAD — Токио для AUD и Нью-Йорк для CAD).
+    session_windows: list[list[str]] | None = None
     news_blackout_min: int = 30
     magic: int = 20260000
 
     def __post_init__(self) -> None:
         self.name = str(self.name).upper().strip()
         self.timeframe = _norm_timeframe(self.timeframe)
+        if self.session_windows:
+            normalized: list[list[str]] = []
+            for window in self.session_windows:
+                if len(window) != 2:
+                    raise ConfigError(
+                        f"{self.name}: каждое окно сессии задаётся парой [начало, конец], "
+                        f"получено {window!r}"
+                    )
+                # parse_hhmm бросит понятную ошибку на некорректное время
+                from .utils import parse_hhmm
+
+                parse_hhmm(window[0])
+                parse_hhmm(window[1])
+                normalized.append([str(window[0]), str(window[1])])
+            self.session_windows = normalized
         if not self.name:
             raise ConfigError("У символа не указано имя (name)")
         if self.sl_atr_mult <= 0 or self.tp_atr_mult <= 0:
@@ -113,6 +132,19 @@ class SymbolConfig:
     @property
     def reward_risk(self) -> float:
         return self.tp_atr_mult / self.sl_atr_mult
+
+    @property
+    def windows(self) -> list[tuple[str, str]]:
+        """Торговые окна: либо явные, либо единственное из start/end."""
+        if self.session_windows:
+            return [(window[0], window[1]) for window in self.session_windows]
+        return [(self.session_start_utc, self.session_end_utc)]
+
+    def session_text(self) -> str:
+        """Описание сессии для сообщений и отчётов."""
+        from .utils import describe_windows
+
+        return describe_windows(self.windows)
 
 
 @dataclass
@@ -350,11 +382,34 @@ class Config:
 # -----------------------------------------------------------------------------
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Найти корень проекта (где лежит config/config.yaml)."""
-    start = (start or Path(__file__)).resolve()
-    for candidate in [start, *start.parents]:
-        if (candidate / "config" / "config.yaml").exists():
-            return candidate
+    """Найти корень проекта (папку, где лежит config/config.yaml).
+
+    Ищем в порядке приоритета:
+
+    1. явно переданный путь (тесты, ``--root``);
+    2. каталог модуля пакета — обычный запуск из исходников;
+    3. каталог самого ``.exe`` и его родителей — запуск собранного приложения
+       (PyInstaller распаковывает код во временную папку, поэтому искать «от
+       модуля» там бессмысленно, зато рядом с .exe лежит config/);
+    4. текущий рабочий каталог.
+    """
+    candidates: list[Path] = []
+    if start is not None:
+        candidates.append(Path(start))
+    else:
+        candidates.append(Path(__file__))
+        if getattr(sys, "frozen", False):  # собрано PyInstaller'ом
+            candidates.append(Path(sys.executable))
+        candidates.append(Path.cwd())
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        for folder in [candidate.resolve(), *candidate.resolve().parents]:
+            if folder in seen:
+                continue
+            seen.add(folder)
+            if (folder / "config" / "config.yaml").exists():
+                return folder
     return Path.cwd()
 
 

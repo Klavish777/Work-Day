@@ -1,7 +1,9 @@
 """Панель управления агентом для Windows (встроенный tkinter, без зависимостей).
 
-Что это: удобный «пульт» для ежедневной работы — статус, счёт, позиции, сигналы,
-журнал сделок, кнопки запуска/остановки и аварийного стопа, запуск train/backtest.
+Что это: настольное приложение для ежедневной работы с агентом — мастер настройки
+счёта, «быстрый старт» по шагам (проверка → данные → обучение → бэктест → демо),
+статус, счёт, позиции, сигналы, журнал сделок, кнопки запуска/остановки и
+аварийного стопа.
 
 Чем это НЕ является: панель не считает риск, не строит сигналы и не отправляет
 ордера. Всю работу делает агент (тот же CLI, что и в консоли), а панель только
@@ -60,6 +62,9 @@ class AgentPanel(tk.Tk):
         self.agent_process: subprocess.Popen | None = None
         self.task_process: subprocess.Popen | None = None
         self.task_log_position = 0
+        self.pipeline: list[dict] = []
+        self.pipeline_index = 0
+        self.pipeline_symbol = ""
 
         self.title("MT5 AI-Agent — панель управления")
         self.geometry("1040x720")
@@ -129,6 +134,8 @@ class AgentPanel(tk.Tk):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=14, pady=(6, 6))
 
+        self._build_setup_tab()
+        self._build_pipeline_tab()
         self._build_overview_tab()
         self._build_positions_tab()
         self._build_journal_tab()
@@ -172,6 +179,266 @@ class AgentPanel(tk.Tk):
                                     font=("Consolas", 10))
         self.signals_text.pack(fill="both", expand=True)
         self.signals_text.configure(state="disabled")
+
+    def _build_setup_tab(self) -> None:
+        """Мастер настройки: реквизиты демо-счёта, путь к терминалу, выбор символа."""
+        tab = ttk.Frame(self.notebook, padding=14)
+        self.notebook.add(tab, text="Настройка")
+
+        ttk.Label(
+            tab,
+            text="Шаг 1. Реквизиты ДЕМО-счёта. Пароль записывается только в файл .env "
+                 "(он в .gitignore и никуда не отправляется). Вводи сюда ПАРОЛЬ ОТ ДЕМО: "
+                 "реальный счёт настраивается через MT5_REAL_* и запускается только из консоли.",
+            style="Muted.TLabel", wraplength=900, justify="left",
+        ).pack(anchor="w")
+
+        form = ttk.Frame(tab)
+        form.pack(fill="x", pady=(12, 6))
+
+        self.setup_vars: dict[str, tk.StringVar] = {}
+        env = self.controller.env_values()
+        fields = [
+            ("MT5_LOGIN", "Логин demo-счёта", ""),
+            ("MT5_PASSWORD", "Пароль demo", "*"),
+            ("MT5_SERVER", "Сервер (например MetaQuotes-Demo)", ""),
+            ("MT5_TERMINAL_PATH", "Путь к terminal64.exe (можно пусто)", ""),
+        ]
+        for row, (key, title, mask) in enumerate(fields):
+            ttk.Label(form, text=title).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 10))
+            variable = tk.StringVar(value=env.get(key, ""))
+            entry = ttk.Entry(form, textvariable=variable, width=52, show=mask or "")
+            entry.grid(row=row, column=1, sticky="we", pady=3)
+            self.setup_vars[key] = variable
+        form.columnconfigure(1, weight=1)
+
+        symbol_row = ttk.Frame(tab)
+        symbol_row.pack(fill="x", pady=(8, 4))
+        ttk.Label(symbol_row, text="Рабочий инструмент:").pack(side="left")
+        self.setup_symbol = tk.StringVar(value=self.controller.default_symbol())
+        symbols = [name for name in self.controller.symbol_names() if "(выключен" not in name]
+        self.setup_symbol_box = ttk.Combobox(symbol_row, textvariable=self.setup_symbol,
+                                             values=symbols, width=14, state="readonly")
+        self.setup_symbol_box.pack(side="left", padx=8)
+        ttk.Button(symbol_row, text="Показать параметры инструмента",
+                   command=self.show_symbol_details).pack(side="left", padx=4)
+        ttk.Button(symbol_row, text="Открыть config.yaml  (включить/выключить символы)",
+                   command=self.open_config).pack(side="left", padx=4)
+
+        self.setup_hint = ttk.Label(tab, text=self.controller.symbol_details(self.controller.default_symbol()),
+                                    style="Muted.TLabel", wraplength=900, justify="left")
+        self.setup_hint.pack(anchor="w", pady=(2, 10))
+
+        buttons = ttk.Frame(tab)
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="💾 Сохранить в .env", command=self.save_setup).pack(side="left", padx=3)
+        ttk.Button(buttons, text="🔌 Проверить связь (check)", command=self.task_check).pack(side="left", padx=3)
+        ttk.Button(buttons, text="📂 Открыть .env", command=lambda: self._open_path(self.controller.env_path)).pack(side="left", padx=3)
+
+        tips = ttk.LabelFrame(tab, text="Что должно быть готово до запуска", padding=10)
+        tips.pack(fill="x", pady=(14, 0))
+        ttk.Label(
+            tips,
+            text="1) Терминал MetaTrader 5 запущен и выполнен вход в ДЕМО-счёт.\n"
+                 "2) В терминале включена кнопка AutoTrading (она должна быть зелёной).\n"
+                 "3) Символ добавлен в «Обзор рынка» (для AUDCAD это обязательно).\n"
+                 "4) В .env заполнены логин, пароль и сервер — кнопка «Сохранить в .env» выше.",
+            style="Muted.TLabel", justify="left",
+        ).pack(anchor="w")
+
+    def _build_pipeline_tab(self) -> None:
+        """«Быстрый старт»: пройти путь от проверки до демо-торговли по шагам."""
+        tab = ttk.Frame(self.notebook, padding=14)
+        self.notebook.add(tab, text="Быстрый старт")
+
+        ttk.Label(
+            tab,
+            text="Последовательность шагов, каждый — та же команда, что и в консоли. "
+                 "Можно остановиться на любом шаге и вернуться к нему позже.",
+            style="Muted.TLabel", wraplength=900, justify="left",
+        ).pack(anchor="w")
+
+        controls = ttk.Frame(tab)
+        controls.pack(fill="x", pady=(10, 6))
+        ttk.Label(controls, text="Инструмент:").pack(side="left")
+        self.pipeline_symbol_var = tk.StringVar(value=self.controller.default_symbol())
+        symbols = [name for name in self.controller.symbol_names() if "(выключен" not in name]
+        ttk.Combobox(controls, textvariable=self.pipeline_symbol_var, values=symbols,
+                     width=12, state="readonly").pack(side="left", padx=6)
+        ttk.Label(controls, text="Бары:").pack(side="left", padx=(10, 0))
+        self.pipeline_bars = tk.StringVar(value="20000")
+        ttk.Entry(controls, textvariable=self.pipeline_bars, width=8).pack(side="left", padx=6)
+        ttk.Label(controls, text="Дней теста:").pack(side="left", padx=(10, 0))
+        self.pipeline_days = tk.StringVar(value="180")
+        ttk.Entry(controls, textvariable=self.pipeline_days, width=6).pack(side="left", padx=6)
+        self.pipeline_synthetic = tk.BooleanVar(value=False)
+        ttk.Checkbutton(controls, text="Песочница (без MT5, синтетика)",
+                        variable=self.pipeline_synthetic).pack(side="left", padx=(10, 0))
+
+        buttons = ttk.Frame(tab)
+        buttons.pack(fill="x", pady=(2, 10))
+        ttk.Button(buttons, text="▶ Запустить всё до бэктеста", command=self.start_pipeline).pack(side="left", padx=3)
+        ttk.Button(buttons, text="⏹ Прервать сценарий", command=self.stop_pipeline).pack(side="left", padx=3)
+
+        self.pipeline_status = ttk.Label(tab, text="сценарий не запущен", style="Muted.TLabel")
+        self.pipeline_status.pack(anchor="w", pady=(0, 6))
+
+        self.pipeline_list = tk.Text(tab, height=7, bg=COLORS["panel"], fg=COLORS["text"],
+                                     relief="flat", font=("Consolas", 10), wrap="none")
+        self.pipeline_list.pack(fill="x", pady=(0, 8))
+        self.pipeline_list.configure(state="disabled")
+
+        ttk.Label(tab, text="Вывод выполняемого шага:", style="Muted.TLabel").pack(anchor="w")
+        self.pipeline_output = scrolledtext.ScrolledText(
+            tab, bg="#101419", fg="#d6deeb", relief="flat", font=("Consolas", 9), wrap="word",
+        )
+        self.pipeline_output.pack(fill="both", expand=True, pady=(4, 0))
+
+    def show_symbol_details(self) -> None:
+        name = self.setup_symbol.get().replace(" (выключен)", "")
+        self.setup_hint.configure(text=self.controller.symbol_details(name))
+
+    def save_setup(self) -> None:
+        """Записать реквизиты в .env (без вывода значений в лог/консоль)."""
+        values = {key: variable.get().strip() for key, variable in self.setup_vars.items()}
+        if not values.get("MT5_LOGIN"):
+            messagebox.showwarning("Нечего сохранять", "Заполни хотя бы логин демо-счёта (MT5_LOGIN).")
+            return
+        if not values.get("MT5_PASSWORD") or not values.get("MT5_SERVER"):
+            if not messagebox.askyesno(
+                "Проверь данные",
+                "Пароль или сервер пустые — подключение, скорее всего, не пройдёт.\n"
+                "Всё равно сохранить?",
+            ):
+                return
+        try:
+            path = self.controller.save_env(values)
+        except OSError as exc:
+            messagebox.showerror("Не удалось записать .env", str(exc))
+            return
+        messagebox.showinfo("Сохранено",
+                            f"Реквизиты записаны в {path}\n\nДальше: «Проверить связь (check)» "
+                            "на этой же вкладке.")
+        self.refresh()
+
+    # ------------------------------------------------------------------ «быстрый старт»
+    def start_pipeline(self) -> None:
+        symbol = self.pipeline_symbol_var.get().strip().upper().replace(" (ВЫКЛЮЧЕН)", "")
+        try:
+            bars = int(self.pipeline_bars.get().strip() or "20000")
+            days = int(self.pipeline_days.get().strip() or "180")
+        except ValueError:
+            messagebox.showerror("Проверь числа", "«Бары» и «Дней теста» должны быть целыми числами.")
+            return
+        if self._active_process():
+            messagebox.showinfo("Агент работает",
+                                "Останови агента, прежде чем запускать сценарий обучения.")
+            return
+
+        synthetic = bool(self.pipeline_synthetic.get())
+        self.pipeline = self.controller.pipeline_steps(symbol, bars=bars, days=days, synthetic=synthetic)
+        self.pipeline_symbol = symbol
+        self.pipeline_index = 0
+        self.pipeline_output.delete("1.0", "end")
+        text = (f"Сценарий для {symbol}" +
+                (" (ПЕСОЧНИЦА: синтетические данные, выводы о стратегии делать нельзя)" if synthetic else "") +
+                "\n" + "\n".join(f"   {step['label']}  —  {' '.join(step['args'])}" for step in self.pipeline))
+        self._render_pipeline(extra=text)
+        self.pipeline_status.configure(text="сценарий запущен")
+
+        if not messagebox.askyesno("Запуск сценария",
+                                   f"Выполнить {len(self.pipeline)} шагов для {symbol}?"):
+            self.pipeline = []
+            self.pipeline_status.configure(text="сценарий не запущен")
+            return
+        self._run_pipeline_step()
+
+    def _run_pipeline_step(self) -> None:
+        if not self.pipeline or self.pipeline_index >= len(self.pipeline):
+            self.pipeline_status.configure(text="сценарий завершён")
+            self._after_pipeline()
+            return
+        step = self.pipeline[self.pipeline_index]
+        self.task_log_position = self.controller.task_log_path.stat().st_size \
+            if self.controller.task_log_path.exists() else 0
+        self.pipeline_status.configure(text=f"выполняется {step['label']}")
+        try:
+            self.task_process = self.controller.run_task(step["args"])
+        except OSError as exc:
+            messagebox.showerror("Не удалось запустить шаг", str(exc))
+            self.pipeline = []
+            return
+
+    def _pipeline_step_finished(self, code: int) -> None:
+        step = self.pipeline[self.pipeline_index]
+        step["exit_code"] = code
+        if code != 0:
+            verdict = "внимание" if step["key"] in ("train", "backtest", "check") else "ошибка"
+            self._render_pipeline(extra=f"\n[{step['label']}] завершён кодом {code} ({verdict})")
+            if step["key"] == "backtest":
+                # Ненулевой код бэктеста = метрики ниже порогов: демо автоматически не запускаем
+                self.pipeline_status.configure(
+                    text="бэктест не прошёл пороги — смотри вердикт в выводе; демо не запускаю"
+                )
+                self.pipeline = []
+                return
+            if step["stop_on_nonzero"] or code not in (1,):
+                self.pipeline_status.configure(text=f"сценарий остановлен на шаге: {step['label']}")
+                self.pipeline = []
+                return
+        self.pipeline_index += 1
+        self.after(400, self._run_pipeline_step)
+
+    def stop_pipeline(self) -> None:
+        self.pipeline = []
+        self.pipeline_status.configure(text="сценарий прерван пользователем")
+        if self.task_process is not None and self.task_process.poll() is None:
+            try:
+                self.task_process.terminate()
+            except OSError:  # pragma: no cover
+                pass
+            self.task_process = None
+
+    def _after_pipeline(self) -> None:
+        """После успешного бэктеста предложить демо-торговлю (только paper)."""
+        results = {step["key"]: step.get("exit_code") for step in self.pipeline}
+        self.pipeline = []
+        backtest_ok = results.get("backtest") == 0
+        if results.get("backtest") is None:
+            return
+        if not backtest_ok:
+            messagebox.showwarning(
+                "Бэктест не прошёл пороги",
+                "Автоматически демо-торговлю не запускаю: вердикт бэктеста отрицательный.\n\n"
+                "Это не «сломалось» — так работает защита. Посмотри вердикт и отчёт в reports/,\n"
+                "и реши: менять гипотезу (данные, таймфрейм, признаки) или не торговать этим сигналом.",
+            )
+            return
+        if not messagebox.askyesno(
+            "Сценарий пройден",
+            f"Шаги для {self.pipeline_symbol or 'инструмента'} выполнены.\n\n"
+            "Если вердикт бэктеста положительный — запустить демо-торговлю (paper)?",
+        ):
+            return
+        self.start_agent("paper")
+
+    def _render_pipeline(self, extra: str = "") -> None:
+        lines = []
+        for index, step in enumerate(self.pipeline):
+            if index < self.pipeline_index:
+                mark = "✔" if step.get("exit_code", 0) == 0 else "!"
+            elif index == self.pipeline_index:
+                mark = "▶"
+            else:
+                mark = "·"
+            code = step.get("exit_code")
+            suffix = f"  (код {code})" if code is not None else ""
+            lines.append(f" {mark} {step['label']}{suffix}")
+        text = "\n".join(lines) + (("\n" + extra) if extra else "")
+        self.pipeline_list.configure(state="normal")
+        self.pipeline_list.delete("1.0", "end")
+        self.pipeline_list.insert("1.0", text)
+        self.pipeline_list.configure(state="disabled")
 
     def _build_positions_tab(self) -> None:
         tab = ttk.Frame(self.notebook, padding=12)
@@ -228,7 +495,10 @@ class AgentPanel(tk.Tk):
         controls.pack(fill="x", pady=(8, 6))
         ttk.Label(controls, text="Символ:").pack(side="left")
         self.task_symbol = tk.StringVar(value=self._default_symbol())
-        ttk.Entry(controls, textvariable=self.task_symbol, width=12).pack(side="left", padx=6)
+        ttk.Combobox(
+            controls, textvariable=self.task_symbol, width=12,
+            values=[name for name in self.controller.symbol_names() if "(выключен" not in name],
+        ).pack(side="left", padx=6)
         ttk.Label(controls, text="Бары:").pack(side="left", padx=(12, 0))
         self.task_bars = tk.StringVar(value="20000")
         ttk.Entry(controls, textvariable=self.task_bars, width=8).pack(side="left", padx=6)
@@ -425,13 +695,25 @@ class AgentPanel(tk.Tk):
             if chunk:
                 self.task_text.insert("end", chunk)
                 self.task_text.see("end")
-        if self.task_process is not None and self.task_process.poll() is not None:
-            code = self.task_process.returncode
-            state = "завершена успешно" if code == 0 else f"завершена с кодом {code}"
-            if code == 1:
-                state += " (метрики ниже порогов — смотри вердикт в выводе)"
-            self.task_status.configure(text=f"задача {state}")
-            self.task_process = None
+                if self.pipeline:
+                    self.pipeline_output.insert("end", chunk)
+                    self.pipeline_output.see("end")
+
+        if self.task_process is None or self.task_process.poll() is None:
+            return
+
+        code = self.task_process.returncode
+        self.task_process = None
+        state = "завершена успешно" if code == 0 else f"завершена с кодом {code}"
+        if code == 1:
+            state += " (метрики ниже порогов — смотри вердикт в выводе)"
+        if code == 3:
+            state += " (остановка по безопасности — разберись в причине, автозапуск не поможет)"
+        self.task_status.configure(text=f"задача {state}")
+
+        # Если выполняется «быстрый старт» — передать управление сценарию
+        if self.pipeline:
+            self._pipeline_step_finished(code)
 
     # ------------------------------------------------------------------ обслуживание
     def open_config(self) -> None:
@@ -626,7 +908,16 @@ class AgentPanel(tk.Tk):
         self.destroy()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    # Собранный .exe двурежимный: без аргументов — окно панели, с --cli — обычные
+    # консольные команды. Так одно приложение и запускает агента, и умеет всё
+    # остальное: .exe --cli check / train / run --mode paper ...
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "--cli":
+        from mt5_agent.cli import main as cli_main
+
+        return cli_main(argv[1:])
+
     try:
         controller = AgentController()
     except Exception as exc:

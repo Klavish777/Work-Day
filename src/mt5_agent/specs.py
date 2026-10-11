@@ -125,6 +125,13 @@ FALLBACK_SPECS: dict[str, SymbolSpec] = {
     "USDJPY": SymbolSpec(name="USDJPY", digits=3, point=1e-3, tick_size=1e-3,
                          tick_value_loss=0.68, tick_value_profit=0.68, volume_min=0.01,
                          volume_max=100.0, volume_step=0.01, stops_level_points=0),
+    # AUDCAD котируется в CAD: для долларового счёта стоимость пункта — это
+    # «1 CAD в USD», то есть зависит от курса USDCAD. Значение ниже — только
+    # ориентир; ОБЯЗАТЕЛЬНО сними реальное: fetch --save-specs.
+    "AUDCAD": SymbolSpec(name="AUDCAD", digits=5, point=1e-5, tick_size=1e-5,
+                         tick_value_loss=0.72, tick_value_profit=0.72, volume_min=0.01,
+                         volume_max=100.0, volume_step=0.01, stops_level_points=0,
+                         currency_profit="CAD"),
     "XAUUSD": SymbolSpec(name="XAUUSD", digits=2, point=0.01, tick_size=0.01,
                          tick_value_loss=1.0, tick_value_profit=1.0, volume_min=0.01,
                          volume_max=50.0, volume_step=0.01, stops_level_points=0),

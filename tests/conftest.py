@@ -54,6 +54,21 @@ CONFIG_YAML = textwrap.dedent(
           news_blackout_min: 30
           magic: 111111
 
+        - name: "AUDCAD"
+          enabled: false
+          timeframe: "M15"
+          history_bars: 1500
+          max_spread_points: 30
+          atr_period: 14
+          sl_atr_mult: 1.5
+          tp_atr_mult: 2.25
+          min_atr_points: 2
+          session_windows:
+            - ["00:00", "06:00"]
+            - ["13:00", "19:00"]
+          news_blackout_min: 30
+          magic: 111112
+
     risk:
       risk_per_trade_pct: 0.5
       max_daily_loss_pct: 2.0

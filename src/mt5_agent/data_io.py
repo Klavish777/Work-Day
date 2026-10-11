@@ -24,6 +24,15 @@ from .utils import UTC
 
 CSV_COLUMNS = ["time", "open", "high", "low", "close", "tick_volume", "spread", "real_volume"]
 
+# Типовые уровни цен — нужны только синтетике, чтобы числа были «похожи на правду»
+# (иначе модель увидит нереалистичные относительные движения).
+_TYPICAL_PRICES = {
+    "EURUSD": 1.10, "GBPUSD": 1.27, "USDJPY": 150.0, "USDCHF": 0.88,
+    "AUDUSD": 0.66, "NZDUSD": 0.61, "USDCAD": 1.36,
+    "AUDCAD": 0.91, "AUDNZD": 1.08, "NZDCAD": 0.83, "EURGBP": 0.85,
+    "XAUUSD": 2350.0,
+}
+
 _TIMEFRAME_MINUTES = {
     "M1": 1, "M2": 2, "M3": 3, "M4": 4, "M5": 5, "M6": 6, "M10": 10, "M12": 12,
     "M15": 15, "M20": 20, "M30": 30, "H1": 60, "H2": 120, "H3": 180, "H4": 240,
@@ -161,7 +170,7 @@ def synthetic_bars(
     session = 1.0 + 0.5 * np.exp(-((hours - 10) ** 2) / 12.0) + 0.4 * np.exp(-((hours - 15) ** 2) / 10.0)
     returns = returns * session
 
-    prices = 1.10 if symbol.upper().startswith("EUR") else (1.25 if symbol.upper().startswith("GBP") else 1.0)
+    prices = _TYPICAL_PRICES.get(symbol.upper(), 1.0)
     closes = prices * np.exp(np.cumsum(returns))
     opens = np.concatenate([[prices], closes[:-1]])
     wick = np.abs(rng.normal(0, 1, bars)) * vol_process * prices

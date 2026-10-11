@@ -1,0 +1,129 @@
+# =============================================================================
+#  Сборка настольного приложения MT5 AI-Agent под Windows.
+#
+#  Зачем этот файл: собрать .exe можно только НА Windows (PyInstaller не умеет
+#  кросс-сборку), поэтому сборка выполняется на раннере GitHub Actions, а готовый
+#  файл выкладывается как артефакт (и как релиз — при пуше тега v*).
+#
+#  Как получить приложение: вкладка Actions → «Сборка приложения (Windows)» →
+#  Run workflow → скачать артефакт MT5-Agent-Windows.
+# =============================================================================
+
+name: Сборка приложения (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Получить код
+        uses: actions/checkout@v4
+
+      - name: Установить Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Прогнать тесты (сборка ломается при красных тестах)
+        run: pytest -q
+
+      - name: Собрать приложение (.exe)
+        run: |
+          python -m PyInstaller `
+            --noconfirm --clean --onefile --windowed `
+            --name MT5-Agent `
+            --paths src `
+            --collect-submodules mt5_agent `
+            --hidden-import MetaTrader5 `
+            --exclude-module matplotlib `
+            --exclude-module scipy `
+            --exclude-module PyQt5 `
+            --distpath dist --workpath build --specpath build `
+            tools/agent_gui.py
+
+      - name: Собрать пакет приложения (exe + конфиг + инструкция)
+        shell: pwsh
+        run: |
+          $package = "dist/MT5-Agent-Windows"
+          New-Item -ItemType Directory -Path $package -Force | Out-Null
+          New-Item -ItemType Directory -Path "$package/config" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$package/models" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$package/state" -Force | Out-Null
+
+          Copy-Item "dist/MT5-Agent.exe" "$package/MT5-Agent.exe" -Force
+          Copy-Item "config/config.yaml" "$package/config/config.yaml" -Force
+          Copy-Item ".env.example" "$package/.env.example" -Force
+          Copy-Item "docs/QUICKSTART.md" "$package/КАК-ЗАПУСТИТЬ.md" -Force
+          Copy-Item "state/headlines.txt.example" "$package/state/headlines.txt.example" -Force
+
+          $readme = @'
+          MT5 AI-Agent — настольное приложение (Windows)
+          ===============================================
+
+          1. Установите терминал MetaTrader 5 и войдите в ДЕМО-счёт.
+          2. В терминале включите кнопку AutoTrading (она должна стать зелёной).
+          3. Запустите MT5-Agent.exe двойным щелчком — откроется окно панели.
+          4. Вкладка «Настройка»: впишите логин/пароль/сервер ДЕМО-счёта →
+             «Сохранить в .env» → «Проверить связь (check)».
+          5. Вкладка «Быстрый старт»: выберите инструмент (AUDCAD) →
+             «Запустить всё до бэктеста» → прочитайте вердикт бэктеста.
+          6. Если вердикт положительный — демо-торговля (paper-режим).
+
+          Важно:
+          * Файл .env создаётся из .env.example в этой же папке. Пароль хранится
+            только здесь, на вашем ПК, и никуда не отправляется.
+          * Приложение не самодостаточно: рядом нужны папки config\ и models\
+            (models заполнится сама после шага обучения).
+          * Реальный счёт через окно недоступен. Только консольный режим:
+              MT5-Agent.exe --cli run --mode live --i-understand-live
+            и три независимых подтверждения (см. docs/SAFETY.md в репозитории).
+          * Метрики бэктеста в файле отчёта — не обещание дохода. Демо-период
+            1–3 месяца обязателен. Только отдельный счёт и только те деньги,
+            которые готовы потерять.
+          '@
+          Set-Content -Path "$package/ПРОЧТИ-МЕНЯ.txt" -Value $readme -Encoding UTF8
+
+          Copy-Item "docs" "$package/docs" -Recurse -Force
+          Compress-Archive -Path "$package/*" -DestinationPath "dist/MT5-Agent-Windows.zip" -Force
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Сохранить артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: MT5-Agent-Windows
+          path: dist/MT5-Agent-Windows.zip
+          if-no-files-found: error
+
+      - name: Выложить релиз (только для тегов v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MT5-Agent-Windows.zip
+          body: |
+            Настольное приложение MT5 AI-Agent для Windows.
+
+            Внутри архива: MT5-Agent.exe (окно панели + консольный режим `--cli`),
+            config/config.yaml, .env.example, документация.
+
+            Быстрый старт: распакуйте → запустите MT5-Agent.exe → вкладка «Настройка»
+            (реквизиты ДЕМО-счёта) → «Быстрый старт» → демо-торговля.
+
+            Напоминание: это инструмент, а не источник дохода. Работайте на отдельном
+            счёте и только с суммой, которую готовы потерять.

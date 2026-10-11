@@ -27,7 +27,7 @@ from .exceptions import DataError
 from .features import atr, build_features, validate_ohlcv
 from .logging_setup import get_logger, log_event
 from .model import SignalModel
-from .utils import in_session, utc_now
+from .utils import in_session_windows, utc_now
 
 log = get_logger("signals")
 
@@ -75,8 +75,11 @@ def market_filters(
     point: float,
 ) -> dict[str, bool]:
     """Быстрые проверки «стоит ли вообще смотреть на этот бар»."""
+    windows = getattr(symbol_cfg, "windows", None) or [
+        (symbol_cfg.session_start_utc, symbol_cfg.session_end_utc)
+    ]
     return {
-        "session": in_session(now, symbol_cfg.session_start_utc, symbol_cfg.session_end_utc),
+        "session": in_session_windows(now, windows),
         "spread": spread_points <= symbol_cfg.max_spread_points,
         "volatility": atr_value / point >= symbol_cfg.min_atr_points,
     }
@@ -124,9 +127,11 @@ def generate_signal(
 
     # --- 4. рыночные фильтры ---------------------------------------------------
     if not result.filters["session"]:
-        result.reason = (
-            f"вне торговой сессии ({symbol_cfg.session_start_utc}–{symbol_cfg.session_end_utc} UTC)"
+        describe = getattr(symbol_cfg, "session_text", None)
+        session_text = describe() if callable(describe) else (
+            f"{symbol_cfg.session_start_utc}–{symbol_cfg.session_end_utc}"
         )
+        result.reason = f"вне торговых сессий ({session_text} UTC)"
         return result
     if not result.filters["spread"]:
         result.reason = (

@@ -1,7 +1,11 @@
 # Быстрый старт: от нуля до демо-торговли
 
-Это пошаговая инструкция для Windows. Рассчитана на 20–30 минут (без учёта времени,
-которое уйдёт на скачивание Python и терминала MT5). Всё делается в PowerShell.
+Инструкция для Windows, рабочая пара — **AUDCAD**. Рассчитана на 20–30 минут (без учёта
+скачивания Python и терминала MT5). Всё делается в PowerShell.
+
+> Если не хочется работать в консоли — есть **приложение с кнопками**:
+> [`docs/APP.md`](APP.md). Оно делает те же шаги (мастер настройки счёта, «быстрый
+> старт» из четырёх шагов, запуск демо-торговли), но мышкой.
 
 Если какой-то шаг не сработал — смотри раздел «Если что-то не работает» в конце.
 
@@ -102,7 +106,7 @@ MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 [ДЕМО] login=12345678 @ MetaQuotes-Demo | equity=1000.00 USD | ... | торговля: разрешена
   Демо-счёт: да ✅
   Автоторговля разрешена: да ✅
-  EURUSD: bid=1.08543 ask=1.08555 спред=1.2 пт | digits=5 step=0.01 tick_value_loss=1.0
+  AUDCAD: bid=0.91273 ask=0.91295 спред=2.2 пт | digits=5 step=0.01 tick_value_loss=0.72
 ```
 
 Всё, что помечено ⛔️, нужно исправить до следующих шагов. Здесь же видно реальную
@@ -116,7 +120,7 @@ MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 .\.venv\Scripts\python.exe -m mt5_agent fetch --bars 20000 --save-specs
 ```
 
-Появится `data\EURUSD_M15.csv` (бары) и `data\symbol_specs.yaml` (параметры символа).
+Появится `data\AUDCAD_M15.csv` (бары) и `data\symbol_specs.yaml` (параметры символа).
 Второй файл важен: в бэктесте риск считается по **твоим** значениям, а не по «средним
 из интернета».
 
@@ -125,11 +129,11 @@ MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 ## Шаг 7. Обучить модель
 
 ```powershell
-.\.venv\Scripts\python.exe -m mt5_agent train --symbol EURUSD
+.\.venv\Scripts\python.exe -m mt5_agent train --symbol AUDCAD
 ```
 
 Займёт от нескольких секунд до пары минут. Отчёт сохранится в
-`reports\train_EURUSD_M15.txt`.
+`reports\train_AUDCAD_M15.txt`.
 
 Смотри в отчёте **два числа**:
 
@@ -144,7 +148,7 @@ MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 ## Шаг 8. Бэктест (главная проверка)
 
 ```powershell
-.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol EURUSD --days 180
+.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol AUDCAD --days 180
 ```
 
 В конце отчёта — вердикт:
@@ -154,7 +158,7 @@ MT5_TERMINAL_PATH=C:\Program Files\MetaTrader 5\terminal64.exe
 * **⛔️ НЕ ГОДИТСЯ для торговли** — в студию не выходим, правим идею (признаки,
   таймфрейм, горизонт), а не пороги.
 
-Отчёт: `reports\backtest_EURUSD_M15.txt` и `.json`.
+Отчёт: `reports\backtest_AUDCAD_M15.txt` и `.json`.
 
 ---
 
@@ -175,9 +179,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper
 Агент работает циклами (по умолчанию раз в 60 секунд), сам считает сигналы, ставит
 ордера со стопом и тейком, ведёт дневные лимиты. Остановить — `Ctrl+C` в окне.
 
-> Учти: по умолчанию торговля разрешена только в сессию **07:00–19:00 UTC**. Чтобы
-> увидеть сделки, запускай в эти часы (или измени `session_start_utc/session_end_utc`
-> в `config\config.yaml`).
+> Учти: для AUDCAD заданы **два окна ликвидности** (UTC): `00:00–06:00` (Токио/Сидней
+> со стороны AUD) и `13:00–19:00` (Нью-Йорк со стороны CAD). В остальные часы агент
+> новых сделок не открывает — это не поломка, а фильтр «тонкого рынка». Менять окна
+> можно в `config\config.yaml` → `session_windows`.
 
 Смотреть, что происходит:
 
@@ -205,9 +210,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1 -Mode paper
 
 ---
 
-## Шаг 10. Панель управления вместо консоли (по желанию)
+## Шаг 10. Приложение с кнопками вместо консоли (по желанию)
 
-Если удобнее нажимать кнопки, чем писать команды:
+Если удобнее нажимать кнопки, чем писать команды — есть настольное приложение:
+мастер настройки счёта, «быстрый старт» (проверка → данные → обучение → бэктест → демо),
+статус, позиции, журнал и аварийный стоп. Полное описание: [`docs/APP.md`](APP.md).
+
+Получить приложение можно тремя способами: скачать готовый `MT5-Agent.exe` из
+GitHub Actions (Python не нужен), собрать локально (`build_exe.ps1`) или просто запустить
+интерфейс на уже установленном Python:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1
@@ -237,9 +248,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1
   (см. `docs/SAFETY.md`). Это осознанное ограничение, а не недоделка;
 * лимиты риска в панели не редактируются: меняешь `config.yaml` и перезапускаешь
   агента. Так решение «увеличить риск» не принимается одним нажатием в просадке;
-* если нужен один `.exe` для двойного щелчка:
-  `powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1`
-  (важно: `.exe` — только оболочка, рядом всё равно нужны проект, `.env` и терминал).
+* `.exe` двурежимный: двойной щелчок — окно панели, `MT5-Agent.exe --cli train --symbol AUDCAD`
+  — обычная команда агента (это позволяет запускать задачи из планировщика без Python);
+* рядом с `.exe` обязательно должны лежать `config\` и `.env` — приложение читает их
+  из своей папки.
 
 ## Шаг 11. Режим 24/7 на VPS (когда демо уже показало себя)
 
@@ -280,14 +292,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tasks.ps1 -Mode pape
 | `терминал не подключён к торговому серверу` | нет интернета / терминал не вошёл в счёт | проверь связь и вход в терминале |
 | `ОСТАНОВКА ПО БЕЗОПАСНОСТИ: Режим paper предполагает ДЕМО-счёт` | в `.env` указан реальный счёт | для демо-режима нужен именно демо-логин (или запусти `-Mode shadow` — он вообще не торгует) |
 | `нет обученной модели ... обучение: python -m mt5_agent train` | шаг 7 пропущен | выполни `train`, затем запусти снова |
-| В бэктесте 0 сделок | вероятности не дотягивают до порога / отфильтрована сессия | посмотри таблицу порогов в `reports\train_*.txt`; проверь `session_*_utc` |
+| В бэктесте 0 сделок | вероятности не дотягивают до порога / отфильтрована сессия | посмотри таблицу порогов в `reports\train_*.txt`; проверь окна `session_windows` в `config\config.yaml` |
 | Кракозябры в консоли | старая консоль Windows | используй **Windows Terminal** или PowerShell 7; либо перед запуском `chcp 65001` |
 | Скрипт `.ps1` не запускается | политика выполнения | всегда запускай с `powershell -ExecutionPolicy Bypass -File .\scripts\...` |
 | Агент «молчит», сделок нет | вне сессии по UTC или сработал лимит | `python -m mt5_agent status` покажет причину по каждому символу |
 | Панель не открывается: `No module named tkinter` | Python установлен без tcl/tk | переустанови Python с python.org, оставив галочку «tcl/tk and IDLE», и пересоздай `.venv` |
 | Панель: «Kill switch активен», запуск не идёт | в `state\KILL_SWITCH` лежит файл стопа | нажми в панели «Снять стоп» (или `python -m mt5_agent unkill`), предварительно поняв причину |
-| Панель: «нет модели для EURUSD» | не выполнен `train` | вкладка «Задачи» → `train` (нужны данные: сначала `fetch`) |
+| Панель: «нет модели для AUDCAD» | не выполнен `train` | вкладка «Задачи» → `train` (нужны данные: сначала `fetch`) |
 | Хочу остановить, но не закрывать позиции | нужна мягкая остановка | кнопка «Остановить мягко» / `python -m mt5_agent stop` (не `kill`!) |
+| AUDCAD: «вне торговых сессий» почти весь день | так заданы окна ликвидности | это норма: `00:00–06:00` и `13:00–19:00` UTC; меняется в `session_windows` |
+| AUDCAD: «спред шире 30 пт» | узкое время (ролловер, вечер пятницы) | подожди окна ликвидности; при желании подними `max_spread_points` — но помни, что это увеличит издержки |
+| Размер лота по AUDCAD больше, чем «привычно по EURUSD» | пункт AUDCAD дешевле (валюта прибыли CAD) | это правильно: лот считается от риска, а не «как у EURUSD» |
 
 ---
 
@@ -302,8 +317,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register_tasks.ps1 -Mode pape
 # данные и модель
 .\.venv\Scripts\python.exe -m mt5_agent fetch --bars 20000 --save-specs
 .\.venv\Scripts\python.exe -m mt5_agent fetch --symbol GBPUSD --timeframe H1
-.\.venv\Scripts\python.exe -m mt5_agent train --symbol EURUSD
-.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol EURUSD --days 180
+.\.venv\Scripts\python.exe -m mt5_agent train --symbol AUDCAD
+.\.venv\Scripts\python.exe -m mt5_agent backtest --symbol AUDCAD --days 180
 
 # торговля
 .\.venv\Scripts\python.exe -m mt5_agent run --once --dry-run   # один цикл без ордеров
@@ -333,6 +348,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_gui.ps1 -CreateShortcut
 * `docs/SAFETY.md` — какие лимиты и барьеры стоят между агентом и деньгами;
 * `docs/RUNBOOK.md` — эксплуатация на VPS, инциденты, недельные сверки;
 * `docs/ARCHITECTURE.md` — как добавлять символы, признаки, модели;
+* `docs/APP.md` — приложение для ПК: как получить, что нажимать, что оно НЕ делает;
 * `docs/NEWS.md` — новостной фильтр и подключение локальной LLM (Ollama).
 
 Ещё раз о главном: панель и дашборд делают **управление** удобнее, но не меняют

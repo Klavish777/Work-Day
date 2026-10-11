@@ -51,6 +51,26 @@ def in_session(now_utc: datetime, start_hhmm: str, end_hhmm: str) -> bool:
     return minutes_now >= minutes_start or minutes_now < minutes_end
 
 
+def in_session_windows(now_utc: datetime, windows: list[tuple[str, str]]) -> bool:
+    """Внутри ли ``now`` хотя бы одного из торговых окон.
+
+    Нужно для инструментов, у которых ликвидность приходит «волнами» из разных
+    регионов. Пример — AUDCAD: активная торговля идёт в токийскую сессию (со стороны
+    AUD) и в нью-йоркскую (со стороны CAD), а между ними и во время ролловера спред
+    расширяется. Одним окном это не описать, поэтому их несколько.
+    """
+    if not windows:
+        return True
+    return any(in_session(now_utc, start, end) for start, end in windows)
+
+
+def describe_windows(windows: list[tuple[str, str]] | None, start: str = "", end: str = "") -> str:
+    """Человекочитаемое описание торговых окон для логов и сообщений."""
+    if not windows:
+        return f"{start}–{end}"
+    return ", ".join(f"{window_start}–{window_end}" for window_start, window_end in windows)
+
+
 def session_ends_at(now_utc: datetime, start_hhmm: str, end_hhmm: str) -> datetime | None:
     """Когда закончится текущая сессия (для тайм-стопа по времени)."""
     if not in_session(now_utc, start_hhmm, end_hhmm):
